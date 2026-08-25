@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/describe.js": {
+      "maxDuration": 30
+    }
+  }
+}

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Scene Describer</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000000;
+    color: #FFD400;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    text-align: center;
+    margin: 8px 0 16px;
+    letter-spacing: 0.5px;
+  }
+  .video-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #111;
+    border: 3px solid #FFD400;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  video, canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  canvas { display: none; }
+  .status {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 14px 0;
+    min-height: 26px;
+  }
+  .describe-btn {
+    display: block;
+    width: 100%;
+    padding: 28px 16px;
+    font-size: 26px;
+    font-weight: 700;
+    background: #FFD400;
+    color: #000000;
+    border: none;
+    border-radius: 16px;
+    cursor: pointer;
+    margin-top: 12px;
+    letter-spacing: 0.5px;
+  }
+  .describe-btn:active { background: #E6BF00; }
+  .describe-btn:disabled { background: #665500; color: #000; cursor: not-allowed; }
+  .describe-btn:focus-visible {
+    outline: 4px solid #FFFFFF;
+    outline-offset: 3px;
+  }
+  .secondary-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .secondary-btn {
+    flex: 1;
+    padding: 16px 8px;
+    font-size: 16px;
+    font-weight: 700;
+    background: transparent;
+    color: #FFD400;
+    border: 2px solid #FFD400;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  .secondary-btn:focus-visible {
+    outline: 4px solid #FFFFFF;
+    outline-offset: 3px;
+  }
+  .result {
+    margin-top: 18px;
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 20px;
+    line-height: 1.5;
+    color: #FFFFFF;
+    min-height: 60px;
+    flex: 1;
+  }
+  .result.empty {
+    color: #777;
+    font-size: 16px;
+    font-weight: 400;
+  }
+  .error {
+    color: #FF6B6B;
+    font-weight: 700;
+    margin-top: 10px;
+    text-align: center;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Scene Describer</h1>
+
+  <div class="video-frame">
+    <video id="video" autoplay playsinline muted aria-hidden="true"></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="status" id="status" role="status" aria-live="polite">Starting camera…</div>
+
+  <button class="describe-btn" id="describeBtn" disabled>
+    Describe what's in front of me
+  </button>
+
+  <div class="secondary-row">
+    <button class="secondary-btn" id="repeatBtn" disabled>Repeat</button>
+    <button class="secondary-btn" id="switchBtn">Switch camera</button>
+  </div>
+
+  <div class="error" id="error" role="alert"></div>
+
+  <div class="result empty" id="result" aria-live="polite">
+    Press the big button. I'll take a look and describe it out loud.
+  </div>
+</div>
+
+<script>
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const describeBtn = document.getElementById('describeBtn');
+  const repeatBtn = document.getElementById('repeatBtn');
+  const switchBtn = document.getElementById('switchBtn');
+  const statusEl = document.getElementById('status');
+  const resultEl = document.getElementById('result');
+  const errorEl = document.getElementById('error');
+
+  let currentStream = null;
+  let facingMode = 'environment';
+  let lastDescription = '';
+
+  function setStatus(text) { statusEl.textContent = text; }
+  function setError(text) { errorEl.textContent = text || ''; }
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1;
+    utter.pitch = 1;
+    window.speechSynthesis.speak(utter);
+  }
+
+  async function startCamera() {
+    setError('');
+    setStatus('Starting camera…');
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: facingMode } },
+        audio: false
+      });
+      currentStream = stream;
+      video.srcObject = stream;
+      await video.play();
+      setStatus('Camera ready. Press the button to describe.');
+      describeBtn.disabled = false;
+    } catch (err) {
+      setStatus('');
+      setError('Could not access the camera. Check permissions and try again.');
+      describeBtn.disabled = true;
+    }
+  }
+
+  function captureFrameBase64() {
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, w, h);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    return dataUrl.split(',')[1];
+  }
+
+  async function describeScene() {
+    setError('');
+    describeBtn.disabled = true;
+    repeatBtn.disabled = true;
+    setStatus('Looking…');
+    resultEl.classList.remove('empty');
+    resultEl.textContent = 'Looking at the scene…';
+
+    try {
+      const base64Image = captureFrameBase64();
+
+      const response = await fetch('/api/describe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64Image })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'API error ' + response.status);
+      }
+
+      const text = (data.description || '').trim();
+
+      if (!text) {
+        throw new Error('No description returned');
+      }
+
+      lastDescription = text;
+      resultEl.textContent = text;
+      setStatus('Done. Press again to describe once more.');
+      speak(text);
+    } catch (err) {
+      setError("Couldn't get a description. Check your connection and try again.");
+      resultEl.classList.add('empty');
+      resultEl.textContent = "Press the big button. I'll take a look and describe it out loud.";
+      setStatus('');
+    } finally {
+      describeBtn.disabled = false;
+      repeatBtn.disabled = !lastDescription;
+    }
+  }
+
+  describeBtn.addEventListener('click', describeScene);
+
+  repeatBtn.addEventListener('click', () => {
+    if (lastDescription) speak(lastDescription);
+  });
+
+  switchBtn.addEventListener('click', () => {
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    startCamera();
+  });
+
+  startCamera();
+</script>
+</body>
+</html>
