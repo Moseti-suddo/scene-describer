@@ -170,6 +170,7 @@
 
   let currentStream = null;
   let facingMode = 'environment';
+  let hasAnnouncedInstructions = false;
 
   // Conversation state: the photo currently being discussed, plus the
   // back-and-forth so far. A fresh "describe" resets both.
@@ -233,6 +234,14 @@
       video.srcObject = stream;
       await video.play();
       setStatus('Ready. Double-tap anywhere to begin.');
+
+      // Speak the instructions out loud once, since a blind user can't
+      // read the on-screen text. Only on the very first successful start,
+      // not when switching cameras afterward.
+      if (!hasAnnouncedInstructions) {
+        hasAnnouncedInstructions = true;
+        speak('Scene Describer is ready. Double-tap anywhere on the screen to speak.');
+      }
     } catch (err) {
       setStatus('');
       setError('Could not access the camera. Check permissions and try again.');
