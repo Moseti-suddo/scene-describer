@@ -290,13 +290,22 @@
         const text = event.results?.[0]?.[0]?.transcript || '';
         finish(text.trim());
       };
-      recognizer.onerror = () => { clearTimeout(timer); finish(null); };
+      recognizer.onerror = (event) => {
+        clearTimeout(timer);
+        if (event && event.error === 'not-allowed') {
+          setError('Microphone access is blocked for this site. Check Chrome site settings and allow the microphone, then reload.');
+        } else if (event && event.error && event.error !== 'no-speech' && event.error !== 'aborted') {
+          setError('Voice recognition error: ' + event.error);
+        }
+        finish(null);
+      };
       recognizer.onend = () => { clearTimeout(timer); finish(null); };
 
       try {
         recognizer.start();
       } catch (e) {
         clearTimeout(timer);
+        setError('Could not start voice recognition: ' + (e && e.message ? e.message : e));
         finish(null);
       }
     });
