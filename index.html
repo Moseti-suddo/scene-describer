@@ -2,36 +2,38 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Scene Describer</title>
 <style>
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0;
     padding: 0;
     background: #000000;
     color: #FFD400;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    min-height: 100vh;
+    height: 100%;
+    overflow: hidden;
+    touch-action: manipulation;
   }
-  .wrap {
-    max-width: 480px;
-    margin: 0 auto;
-    padding: 16px;
+  #app {
+    position: fixed;
+    inset: 0;
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    padding: 16px;
   }
   h1 {
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 700;
     text-align: center;
-    margin: 8px 0 16px;
+    margin: 4px 0 12px;
     letter-spacing: 0.5px;
   }
   .video-frame {
     position: relative;
     width: 100%;
+    flex: 0 0 auto;
     aspect-ratio: 4 / 3;
     background: #111;
     border: 3px solid #FFD400;
@@ -45,76 +47,83 @@
     display: block;
   }
   canvas { display: none; }
-  .status {
-    text-align: center;
-    font-size: 18px;
-    font-weight: 700;
-    margin: 14px 0;
-    min-height: 26px;
-  }
-  .describe-btn {
-    display: block;
-    width: 100%;
-    padding: 28px 16px;
-    font-size: 26px;
-    font-weight: 700;
-    background: #FFD400;
-    color: #000000;
-    border: none;
-    border-radius: 16px;
-    cursor: pointer;
-    margin-top: 12px;
-    letter-spacing: 0.5px;
-  }
-  .describe-btn:active { background: #E6BF00; }
-  .describe-btn:disabled { background: #665500; color: #000; cursor: not-allowed; }
-  .describe-btn:focus-visible {
-    outline: 4px solid #FFFFFF;
-    outline-offset: 3px;
-  }
-  .secondary-row {
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-  }
-  .secondary-btn {
-    flex: 1;
-    padding: 16px 8px;
-    font-size: 16px;
-    font-weight: 700;
-    background: transparent;
-    color: #FFD400;
-    border: 2px solid #FFD400;
+
+  .state-ring {
+    position: absolute;
+    inset: 0;
     border-radius: 12px;
-    cursor: pointer;
+    pointer-events: none;
+    border: 4px solid transparent;
+    transition: border-color 0.2s ease;
   }
-  .secondary-btn:focus-visible {
-    outline: 4px solid #FFFFFF;
-    outline-offset: 3px;
+  .state-ring.listening { border-color: #4ADE80; animation: pulse 1.1s infinite; }
+  .state-ring.thinking { border-color: #FFD400; animation: pulse 1.1s infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
   }
+
+  .status-badge {
+    text-align: center;
+    font-size: 17px;
+    font-weight: 700;
+    margin: 12px 0 8px;
+    min-height: 24px;
+  }
+
   .result {
-    margin-top: 18px;
+    flex: 1;
+    margin-top: 6px;
     background: #111;
     border: 2px solid #333;
     border-radius: 12px;
     padding: 16px;
-    font-size: 20px;
+    font-size: 19px;
     line-height: 1.5;
     color: #FFFFFF;
-    min-height: 60px;
-    flex: 1;
+    overflow-y: auto;
   }
-  .result.empty {
-    color: #777;
-    font-size: 16px;
-    font-weight: 400;
+  .result.empty { color: #888; font-size: 16px; font-weight: 400; }
+  .turn { margin-bottom: 12px; }
+  .turn .role { font-size: 12px; font-weight: 700; color: #FFD400; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+
+  .tap-hint {
+    text-align: center;
+    font-size: 15px;
+    color: #999;
+    margin-top: 8px;
+    font-weight: 600;
   }
+
   .error {
     color: #FF6B6B;
     font-weight: 700;
-    margin-top: 10px;
     text-align: center;
+    margin-top: 6px;
+    min-height: 20px;
   }
+
+  .switch-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 5;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    background: rgba(0,0,0,0.6);
+    color: #FFD400;
+    border: 2px solid #FFD400;
+    border-radius: 10px;
+  }
+  .switch-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+
+  .tap-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+
   .sr-only {
     position: absolute;
     width: 1px; height: 1px;
@@ -125,64 +134,96 @@
 </style>
 </head>
 <body>
-<div class="wrap">
+<div id="app">
   <h1>Scene Describer</h1>
 
   <div class="video-frame">
     <video id="video" autoplay playsinline muted aria-hidden="true"></video>
     <canvas id="canvas"></canvas>
+    <div class="state-ring" id="stateRing"></div>
+    <button class="switch-btn" id="switchBtn">Switch camera</button>
   </div>
 
-  <div class="status" id="status" role="status" aria-live="polite">Starting camera…</div>
-
-  <button class="describe-btn" id="describeBtn" disabled>
-    Describe what's in front of me
-  </button>
-
-  <div class="secondary-row">
-    <button class="secondary-btn" id="repeatBtn" disabled>Repeat</button>
-    <button class="secondary-btn" id="switchBtn">Switch camera</button>
-  </div>
-
+  <div class="status-badge" id="status" role="status" aria-live="polite">Starting camera…</div>
   <div class="error" id="error" role="alert"></div>
 
   <div class="result empty" id="result" aria-live="polite">
-    Press the big button. I'll take a look and describe it out loud.
+    Double-tap anywhere on the screen to start. Then just talk.
   </div>
+
+  <div class="tap-hint" id="tapHint">Double-tap anywhere to begin</div>
 </div>
+
+<!-- Full-screen invisible layer so a double-tap ANYWHERE activates listening -->
+<div class="tap-layer" id="tapLayer"></div>
 
 <script>
   const video = document.getElementById('video');
   const canvas = document.getElementById('canvas');
-  const describeBtn = document.getElementById('describeBtn');
-  const repeatBtn = document.getElementById('repeatBtn');
-  const switchBtn = document.getElementById('switchBtn');
   const statusEl = document.getElementById('status');
-  const resultEl = document.getElementById('result');
   const errorEl = document.getElementById('error');
+  const resultEl = document.getElementById('result');
+  const stateRing = document.getElementById('stateRing');
+  const switchBtn = document.getElementById('switchBtn');
+  const tapLayer = document.getElementById('tapLayer');
+  const tapHint = document.getElementById('tapHint');
 
   let currentStream = null;
   let facingMode = 'environment';
-  let lastDescription = '';
+
+  // Conversation state: the photo currently being discussed, plus the
+  // back-and-forth so far. A fresh "describe" resets both.
+  let activeImageBase64 = null;
+  let conversationHistory = []; // [{ role: 'user'|'assistant', text }]
+
+  // App state machine: 'idle' | 'listening' | 'thinking' | 'speaking'
+  let appState = 'idle';
+
+  const DESCRIBE_KEYWORDS = [
+    'describe', 'what is around', "what's around", 'look around',
+    'new picture', 'take a picture', 'whats here', "what's here",
+    'start over', 'new scene', 'look again'
+  ];
+
+  function setState(state) {
+    appState = state;
+    stateRing.classList.remove('listening', 'thinking');
+    if (state === 'listening') stateRing.classList.add('listening');
+    if (state === 'thinking') stateRing.classList.add('thinking');
+  }
 
   function setStatus(text) { statusEl.textContent = text; }
   function setError(text) { errorEl.textContent = text || ''; }
 
-  function speak(text) {
-    if (!('speechSynthesis' in window)) return;
+  function speak(text, onDone) {
+    if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = 1;
     utter.pitch = 1;
+    setState('speaking');
+    utter.onend = () => { if (onDone) onDone(); };
+    utter.onerror = () => { if (onDone) onDone(); };
     window.speechSynthesis.speak(utter);
   }
 
+  function appendTurn(role, text) {
+    if (resultEl.classList.contains('empty')) {
+      resultEl.classList.remove('empty');
+      resultEl.innerHTML = '';
+    }
+    const div = document.createElement('div');
+    div.className = 'turn';
+    div.innerHTML = `<div class="role">${role === 'user' ? 'You asked' : 'Description'}</div><div>${text}</div>`;
+    resultEl.appendChild(div);
+    resultEl.scrollTop = resultEl.scrollHeight;
+  }
+
+  // ---------- Camera ----------
   async function startCamera() {
     setError('');
     setStatus('Starting camera…');
-    if (currentStream) {
-      currentStream.getTracks().forEach(t => t.stop());
-    }
+    if (currentStream) currentStream.getTracks().forEach(t => t.stop());
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: facingMode } },
@@ -191,12 +232,10 @@
       currentStream = stream;
       video.srcObject = stream;
       await video.play();
-      setStatus('Camera ready. Press the button to describe.');
-      describeBtn.disabled = false;
+      setStatus('Ready. Double-tap anywhere to begin.');
     } catch (err) {
       setStatus('');
       setError('Could not access the camera. Check permissions and try again.');
-      describeBtn.disabled = true;
     }
   }
 
@@ -207,64 +246,186 @@
     canvas.height = h;
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, w, h);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-    return dataUrl.split(',')[1];
+    return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
   }
 
-  async function describeScene() {
-    setError('');
-    describeBtn.disabled = true;
-    repeatBtn.disabled = true;
-    setStatus('Looking…');
-    resultEl.classList.remove('empty');
-    resultEl.textContent = 'Looking at the scene…';
-
-    try {
-      const base64Image = captureFrameBase64();
-
-      const response = await fetch('/api/describe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64Image })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'API error ' + response.status);
-      }
-
-      const text = (data.description || '').trim();
-
-      if (!text) {
-        throw new Error('No description returned');
-      }
-
-      lastDescription = text;
-      resultEl.textContent = text;
-      setStatus('Done. Press again to describe once more.');
-      speak(text);
-    } catch (err) {
-      setError("Couldn't get a description. Check your connection and try again.");
-      resultEl.classList.add('empty');
-      resultEl.textContent = "Press the big button. I'll take a look and describe it out loud.";
-      setStatus('');
-    } finally {
-      describeBtn.disabled = false;
-      repeatBtn.disabled = !lastDescription;
-    }
-  }
-
-  describeBtn.addEventListener('click', describeScene);
-
-  repeatBtn.addEventListener('click', () => {
-    if (lastDescription) speak(lastDescription);
-  });
-
-  switchBtn.addEventListener('click', () => {
+  switchBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     facingMode = facingMode === 'environment' ? 'user' : 'environment';
     startCamera();
   });
+
+  // ---------- Speech recognition (capturing what the user says) ----------
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizer = null;
+  let voiceSupported = !!SpeechRecognitionImpl;
+
+  if (voiceSupported) {
+    recognizer = new SpeechRecognitionImpl();
+    recognizer.continuous = false;
+    recognizer.interimResults = false;
+    recognizer.maxAlternatives = 1;
+  }
+
+  function listenOnce({ timeoutMs = 6000 } = {}) {
+    return new Promise((resolve) => {
+      if (!voiceSupported) { resolve(null); return; }
+
+      setState('listening');
+      setStatus('Listening…');
+      tapHint.textContent = '';
+
+      let settled = false;
+      const finish = (val) => {
+        if (settled) return;
+        settled = true;
+        try { recognizer.stop(); } catch (e) {}
+        resolve(val);
+      };
+
+      const timer = setTimeout(() => finish(null), timeoutMs);
+
+      recognizer.onresult = (event) => {
+        clearTimeout(timer);
+        const text = event.results?.[0]?.[0]?.transcript || '';
+        finish(text.trim());
+      };
+      recognizer.onerror = () => { clearTimeout(timer); finish(null); };
+      recognizer.onend = () => { clearTimeout(timer); finish(null); };
+
+      try {
+        recognizer.start();
+      } catch (e) {
+        clearTimeout(timer);
+        finish(null);
+      }
+    });
+  }
+
+  // ---------- Backend call ----------
+  async function askBackend({ question }) {
+    setState('thinking');
+    setStatus('Thinking…');
+
+    const isFreshScene = !activeImageBase64 || conversationHistory.length === 0;
+
+    if (isFreshScene) {
+      activeImageBase64 = captureFrameBase64();
+      conversationHistory = [];
+    }
+
+    const body = {
+      image: activeImageBase64,
+      history: conversationHistory,
+      question: question || ''
+    };
+
+    const response = await fetch('/api/describe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Request failed');
+    }
+
+    const answer = (data.description || '').trim();
+    if (!answer) throw new Error('Empty response');
+
+    // Record this turn in the conversation.
+    const userTurnText = question && question.trim()
+      ? question.trim()
+      : 'Describe what is in front of me.';
+    conversationHistory.push({ role: 'user', text: userTurnText });
+    conversationHistory.push({ role: 'assistant', text: answer });
+
+    if (question && question.trim()) {
+      appendTurn('user', userTurnText);
+    }
+    appendTurn('assistant', answer);
+
+    return answer;
+  }
+
+  function looksLikeFreshSceneRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return DESCRIBE_KEYWORDS.some(k => lower.includes(k));
+  }
+
+  // ---------- The core interaction loop ----------
+  async function runInteractionCycle(initialSpeech) {
+    let speechText = initialSpeech;
+
+    // First activation (double-tap): no speech captured yet unless voice
+    // recognition ran as part of the tap itself. If nothing was said, or it
+    // sounds like a request for a fresh scene, treat it as "describe now".
+    if (speechText === undefined) {
+      speechText = voiceSupported ? await listenOnce({ timeoutMs: 4000 }) : null;
+    }
+
+    const wantsFreshScene = !speechText || looksLikeFreshSceneRequest(speechText);
+    if (wantsFreshScene) {
+      // A fresh scene request always resets the conversation.
+      activeImageBase64 = null;
+      conversationHistory = [];
+    }
+
+    try {
+      const answer = await askBackend({ question: wantsFreshScene ? '' : speechText });
+      setStatus('');
+      setError('');
+
+      await new Promise(resolve => speak(answer, resolve));
+
+      // Auto-listen for a follow-up without requiring another tap.
+      setState('listening');
+      setStatus('Listening for a follow-up… or stay quiet to finish.');
+      const followUp = voiceSupported ? await listenOnce({ timeoutMs: 5000 }) : null;
+
+      if (followUp) {
+        await runInteractionCycle(followUp);
+      } else {
+        setState('idle');
+        setStatus('Ready. Double-tap anywhere to talk again.');
+        tapHint.textContent = 'Double-tap anywhere to begin';
+      }
+    } catch (err) {
+      setError("Something went wrong. Double-tap to try again.");
+      setState('idle');
+      setStatus('');
+      tapHint.textContent = 'Double-tap anywhere to begin';
+    }
+  }
+
+  // ---------- Double-tap detection, anywhere on screen ----------
+  let lastTapTime = 0;
+  const DOUBLE_TAP_WINDOW_MS = 400;
+
+  function handleActivationTap(e) {
+    // Ignore taps on the switch-camera button; it has its own handler.
+    if (e.target.closest && e.target.closest('.switch-btn')) return;
+
+    const now = Date.now();
+    const isDoubleTap = (now - lastTapTime) < DOUBLE_TAP_WINDOW_MS;
+    lastTapTime = now;
+
+    if (!isDoubleTap) return;
+    if (appState === 'listening' || appState === 'thinking') return; // already active
+
+    window.speechSynthesis.cancel();
+    runInteractionCycle(undefined);
+  }
+
+  tapLayer.addEventListener('touchend', handleActivationTap, { passive: true });
+  tapLayer.addEventListener('click', handleActivationTap);
+
+  // ---------- Init ----------
+  if (!voiceSupported) {
+    setError('Voice recognition is not supported in this browser. Double-tap will still describe the scene, but spoken follow-up questions will not work here.');
+  }
 
   startCamera();
 </script>
