@@ -516,71 +516,157 @@
     startCamera();
   });
 
-  // ---------- Speech recognition (capturing what the user says) ----------
-  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognizer = null;
-  let voiceSupported = !!SpeechRecognitionImpl;
+  // ---------- Speech capture & transcription (record audio, transcribe via Whisper) ----------
+  // Replaces the old browser webkitSpeechRecognition, which shipped audio to
+  // an undocumented Google endpoint that turned out to be unreliable over
+  // Kenyan mobile data ("Voice recognition error: network"). This records
+  // audio locally and transcribes it ourselves via Groq's Whisper API, which
+  // only needs a normal HTTPS call to our own backend — no dependency on
+  // that endpoint at all. Bonus: Whisper handles English/Swahili
+  // code-switching natively.
+  let voiceSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  let micStream = null;
 
-  if (voiceSupported) {
-    recognizer = new SpeechRecognitionImpl();
-    recognizer.continuous = false;
-    recognizer.interimResults = false;
-    recognizer.maxAlternatives = 1;
+  async function ensureMicStream() {
+    if (micStream && micStream.active) return micStream;
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return micStream;
   }
 
-  let recognizerActive = false;
+  function pickRecorderMimeType() {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+    for (const type of candidates) {
+      if (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) return type;
+    }
+    return '';
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result || '').split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function transcribeAudio(blob, mimeType) {
+    const base64 = await blobToBase64(blob);
+    const response = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio: base64, mimeType })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Transcription failed');
+    return (data.text || '').trim();
+  }
+
+  const SILENCE_RMS_THRESHOLD = 0.02;   // roughly "quiet room" level
+  const SILENCE_STOP_DELAY_MS = 1200;   // how long to wait before deciding they're done
+  const MIN_SPEECH_BEFORE_STOP_MS = 300; // ignore brief noise blips right at the start
 
   function listenOnce({ timeoutMs = 6000 } = {}) {
     return new Promise((resolve) => {
       if (!voiceSupported) { resolve(null); return; }
 
-      // Guard: if a previous session is still tearing down, don't call
-      // start() again yet — the browser will throw "already started".
-      if (recognizerActive) { resolve(null); return; }
+      let finished = false;
+      let recorder = null;
+      let audioContext = null;
+      let silenceTimer = null;
+      let hardTimeoutTimer = null;
+      let hasHeardSpeech = false;
+      let mimeType = '';
+      const chunks = [];
+      const startedAt = Date.now();
 
-      setState('listening');
-      setStatus('Listening…');
-      tapHint.textContent = '';
-
-      let resultText = null;
-      let timer = null;
-
-      // IMPORTANT: we only resolve the promise from onend, never directly
-      // from onresult/onerror/timeout. The Web Speech API only guarantees
-      // it's safe to call start() again once onend has actually fired, so
-      // resolving early (and letting the caller immediately listen again)
-      // is what caused "recognition has already started" errors.
-      recognizer.onresult = (event) => {
-        resultText = (event.results?.[0]?.[0]?.transcript || '').trim();
+      const cleanup = () => {
+        if (silenceTimer) clearTimeout(silenceTimer);
+        if (hardTimeoutTimer) clearTimeout(hardTimeoutTimer);
+        if (audioContext) { try { audioContext.close(); } catch (e) {} }
       };
-      recognizer.onerror = (event) => {
-        if (event && event.error === 'not-allowed') {
-          setError('Microphone access is blocked for this site. Check Chrome site settings and allow the microphone, then reload.');
-        } else if (event && event.error && event.error !== 'no-speech' && event.error !== 'aborted') {
-          setError('Voice recognition error: ' + event.error);
+
+      const finish = async (recordedBlob) => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+
+        if (!recordedBlob || recordedBlob.size === 0) { resolve(null); return; }
+
+        setState('thinking');
+        setStatus('Transcribing…');
+        try {
+          const text = await transcribeAudio(recordedBlob, mimeType);
+          resolve(text || null);
+        } catch (err) {
+          setError('Voice recognition error: ' + (err && err.message ? err.message : err));
+          resolve(null);
         }
-        // Don't resolve here — onend always fires after onerror and will
-        // finish things up.
-      };
-      recognizer.onend = () => {
-        clearTimeout(timer);
-        recognizerActive = false;
-        resolve(resultText);
       };
 
-      timer = setTimeout(() => {
-        try { recognizer.stop(); } catch (e) { recognizerActive = false; resolve(resultText); }
-      }, timeoutMs);
+      (async () => {
+        try {
+          const stream = await ensureMicStream();
+          mimeType = pickRecorderMimeType();
+          recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 
-      recognizerActive = true;
-      try {
-        recognizer.start();
-      } catch (e) {
-        clearTimeout(timer);
-        recognizerActive = false;
-        setError('Could not start voice recognition: ' + (e && e.message ? e.message : e));
-        resolve(null);
-      }
+          recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+          recorder.onstop = () => finish(new Blob(chunks, { type: mimeType || 'audio/webm' }));
+
+          // Silence detection: watch mic volume and auto-stop once the
+          // user's gone quiet for a bit, so this feels like the old
+          // "stops listening when you finish talking" behavior.
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+          const checkVolume = () => {
+            if (finished) return;
+            analyser.getByteTimeDomainData(dataArray);
+            let sumSquares = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              const normalized = (dataArray[i] - 128) / 128;
+              sumSquares += normalized * normalized;
+            }
+            const rms = Math.sqrt(sumSquares / dataArray.length);
+
+            if (rms > SILENCE_RMS_THRESHOLD) {
+              hasHeardSpeech = true;
+              if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+            } else if (hasHeardSpeech && !silenceTimer && (Date.now() - startedAt) > MIN_SPEECH_BEFORE_STOP_MS) {
+              silenceTimer = setTimeout(() => {
+                if (recorder && recorder.state === 'recording') recorder.stop();
+              }, SILENCE_STOP_DELAY_MS);
+            }
+
+            if (!finished) requestAnimationFrame(checkVolume);
+          };
+
+          setState('listening');
+          setStatus('Listening…');
+          tapHint.textContent = '';
+
+          recorder.start();
+          requestAnimationFrame(checkVolume);
+
+          hardTimeoutTimer = setTimeout(() => {
+            if (recorder && recorder.state === 'recording') recorder.stop();
+          }, timeoutMs);
+
+        } catch (err) {
+          if (err && err.name === 'NotAllowedError') {
+            setError('Microphone access is blocked for this site. Check Chrome site settings and allow the microphone, then reload.');
+          } else {
+            setError('Could not start voice recognition: ' + (err && err.message ? err.message : err));
+          }
+          finished = true;
+          cleanup();
+          resolve(null);
+        }
+      })();
     });
   }
 
