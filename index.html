@@ -392,8 +392,25 @@
     utter.rate = 1;
     utter.pitch = 1;
     setState('speaking');
-    utter.onend = () => { if (onDone) onDone(); };
-    utter.onerror = () => { if (onDone) onDone(); };
+
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(safetyTimer);
+      if (onDone) onDone();
+    };
+    utter.onend = finish;
+    utter.onerror = finish;
+
+    // Safety net: Chrome occasionally never fires onend/onerror for a
+    // stuck utterance. Without this, anything awaiting speakAsync() would
+    // hang forever — which previously left contactSetupInProgress stuck
+    // `true`, silently disabling the SOS/contact buttons for the rest of
+    // the session.
+    const estimatedMs = Math.max(4000, text.length * 90);
+    const safetyTimer = setTimeout(finish, estimatedMs);
+
     window.speechSynthesis.speak(utter);
   }
 
@@ -552,14 +569,23 @@
 
   async function transcribeAudio(blob, mimeType) {
     const base64 = await blobToBase64(blob);
-    const response = await fetch('/api/transcribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ audio: base64, mimeType })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Transcription failed');
-    return (data.text || '').trim();
+    const controller = new AbortController();
+    // If the network stalls entirely (rather than erroring outright), this
+    // guarantees we still come back with a failure instead of hanging.
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio: base64, mimeType }),
+        signal: controller.signal
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Transcription failed');
+      return (data.text || '').trim();
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   const SILENCE_RMS_THRESHOLD = 0.02;   // roughly "quiet room" level
@@ -780,22 +806,28 @@
     awaitingContactConfirmation = false;
     pendingContactDigits = null;
 
-    await speakAsync("Please say your emergency contact's phone number.");
-    const digitsText = voiceSupported ? await listenOnce({ timeoutMs: 8000 }) : null;
-    const digits = (digitsText || '').replace(/\D/g, '');
+    try {
+      await speakAsync("Please say your emergency contact's phone number.");
+      const digitsText = voiceSupported ? await listenOnce({ timeoutMs: 8000 }) : null;
+      const digits = (digitsText || '').replace(/\D/g, '');
 
-    if (!digits || digits.length < 7) {
-      contactSetupInProgress = false;
+      if (!digits || digits.length < 7) {
+        setState('idle');
+        await speakAsync("I didn't catch a valid phone number. Long-press anywhere to try again.");
+        return;
+      }
+
+      pendingContactDigits = digits;
+      awaitingContactConfirmation = true;
       setState('idle');
-      await speakAsync("I didn't catch a valid phone number. Long-press anywhere to try again.");
-      return;
+      await speakAsync(`I heard ${spacedDigits(digits)}. Long-press to confirm, or double-tap to try again.`);
+    } finally {
+      // No matter how this exits — success, invalid input, or a thrown
+      // error from speech/transcription — this flag must clear, or every
+      // future tap on Set/Change Contact (and Send SOS, which routes
+      // through here when no contact is set) silently no-ops forever.
+      contactSetupInProgress = false;
     }
-
-    pendingContactDigits = digits;
-    awaitingContactConfirmation = true;
-    contactSetupInProgress = false;
-    setState('idle');
-    await speakAsync(`I heard ${spacedDigits(digits)}. Long-press to confirm, or double-tap to try again.`);
   }
 
   // ---------- SOS trigger ----------
