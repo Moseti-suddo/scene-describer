@@ -210,9 +210,43 @@
     clip: rect(0,0,0,0);
     white-space: nowrap;
   }
+
+  /* Visible on top of every tab, so failures are never hidden inside an
+     inactive .view (this is why SOS-tab errors used to be invisible). */
+  .global-error-banner {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 20;
+    background: #3a0000;
+    color: #FF9B9B;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: center;
+    padding: 10px 16px;
+    border-bottom: 2px solid #FF6B6B;
+  }
+  .global-error-banner.visible { display: block; }
+  .global-error-banner .dismiss-btn {
+    display: block;
+    margin: 6px auto 0;
+    background: transparent;
+    border: 1px solid #FF9B9B;
+    color: #FF9B9B;
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 700;
+  }
 </style>
 </head>
 <body>
+
+<div class="global-error-banner" id="globalError" role="alert">
+  <span id="globalErrorText"></span>
+  <button class="dismiss-btn" id="dismissErrorBtn" type="button">Dismiss</button>
+</div>
 
 <div id="app">
 
@@ -264,6 +298,9 @@
   const canvas = document.getElementById('canvas');
   const statusEl = document.getElementById('status');
   const errorEl = document.getElementById('error');
+  const globalErrorEl = document.getElementById('globalError');
+  const globalErrorTextEl = document.getElementById('globalErrorText');
+  const dismissErrorBtn = document.getElementById('dismissErrorBtn');
   const resultEl = document.getElementById('result');
   const stateRing = document.getElementById('stateRing');
   const switchBtn = document.getElementById('switchBtn');
@@ -325,7 +362,28 @@
   }
 
   function setStatus(text) { statusEl.textContent = text; }
-  function setError(text) { errorEl.textContent = text || ''; }
+  function setError(text) {
+    errorEl.textContent = text || '';
+    globalErrorTextEl.textContent = text || '';
+    globalErrorEl.classList.toggle('visible', !!text);
+  }
+
+  dismissErrorBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setError('');
+  });
+
+  // Catch-alls so failures are never silent — this matters especially for
+  // the SOS/contact buttons, which fire off async functions without
+  // awaiting them, so a thrown error there previously just vanished.
+  window.addEventListener('error', (e) => {
+    setError('Unexpected error: ' + (e && e.message ? e.message : 'something went wrong'));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const reason = e && e.reason;
+    const msg = (reason && reason.message) ? reason.message : String(reason || 'unknown error');
+    setError('Unexpected error: ' + msg);
+  });
 
   function speak(text, onDone) {
     if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
@@ -395,11 +453,18 @@
 
   sendSosBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (!emergencyContact) { startContactSetup(); } else { triggerSOS(); }
+    setError('');
+    const action = !emergencyContact ? startContactSetup() : triggerSOS();
+    Promise.resolve(action).catch((err) => {
+      setError('SOS action failed: ' + (err && err.message ? err.message : err));
+    });
   });
   changeContactBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    startContactSetup();
+    setError('');
+    Promise.resolve(startContactSetup()).catch((err) => {
+      setError('Contact setup failed: ' + (err && err.message ? err.message : err));
+    });
   });
 
   // ---------- Camera ----------
@@ -839,11 +904,15 @@
     }
 
     if (!emergencyContact) {
-      startContactSetup();
+      Promise.resolve(startContactSetup()).catch((err) => {
+        setError('Contact setup failed: ' + (err && err.message ? err.message : err));
+      });
       return;
     }
 
-    triggerSOS();
+    Promise.resolve(triggerSOS()).catch((err) => {
+      setError('SOS action failed: ' + (err && err.message ? err.message : err));
+    });
   }
 
   function handleTapRelease(e) {
