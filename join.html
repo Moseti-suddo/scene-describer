@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emergency Contact Setup</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: #FFD400;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    padding: 20px;
+  }
+  .card { max-width: 420px; width: 100%; text-align: center; }
+  h1 { font-size: 24px; margin-bottom: 6px; }
+  p { color: #ddd; font-size: 16px; line-height: 1.5; }
+  .enable-btn {
+    width: 100%;
+    padding: 22px;
+    font-size: 19px;
+    font-weight: 700;
+    background: #FFD400;
+    color: #000;
+    border: none;
+    border-radius: 14px;
+    margin-top: 18px;
+  }
+  .enable-btn:disabled { background: #4ADE80; color: #000; }
+  .status-text { margin-top: 16px; font-size: 16px; font-weight: 700; color: #4ADE80; min-height: 20px; }
+  .error-text { margin-top: 16px; font-size: 15px; color: #FF6B6B; min-height: 20px; }
+  .fine-print { color: #777; font-size: 13px; margin-top: 22px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>You're an Emergency Contact</h1>
+  <p id="intro">Someone using Scene Describer has added you as their emergency contact. To finish setup, allow notifications — this is how you'll be alerted if they ever need help.</p>
+  <button class="enable-btn" id="enableBtn">Enable Notifications</button>
+  <div class="status-text" id="statusText"></div>
+  <div class="error-text" id="errorText"></div>
+  <p class="fine-print">You'll only receive a notification if they send an emergency alert. Nothing is shared otherwise.</p>
+</div>
+
+<script>
+  const VAPID_PUBLIC_KEY = 'BJrLyoUXmrDsDf4xroOldzo3WztOkKdUuPGGpXhpnI9F7rNuSzVyLYg2Rpqmv5DxbsNLJITpejrswNukDTtwgL4';
+
+  const params = new URLSearchParams(window.location.search);
+  const owner = params.get('owner');
+
+  const enableBtn = document.getElementById('enableBtn');
+  const statusText = document.getElementById('statusText');
+  const errorText = document.getElementById('errorText');
+  const intro = document.getElementById('intro');
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+  }
+
+  async function checkExistingStatus() {
+    if (!owner) {
+      intro.textContent = 'This link is missing information and cannot be used.';
+      enableBtn.style.display = 'none';
+      return;
+    }
+    try {
+      const res = await fetch('/api/contact-status?owner=' + encodeURIComponent(owner));
+      const data = await res.json();
+      if (res.ok && data.confirmed) {
+        enableBtn.disabled = true;
+        enableBtn.textContent = 'Already Enabled \u2713';
+        statusText.textContent = "You're all set. You'll be notified if they need help.";
+      }
+    } catch (e) {
+      // Non-fatal; just proceed to let them try enabling.
+    }
+  }
+
+  enableBtn.addEventListener('click', async () => {
+    errorText.textContent = '';
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      errorText.textContent = 'This browser does not support push notifications. Try Chrome on Android.';
+      return;
+    }
+
+    enableBtn.disabled = true;
+    enableBtn.textContent = 'Setting up…';
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        throw new Error('Notification permission was not granted.');
+      }
+
+      const registration = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+
+      const res = await fetch('/api/contact-confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner, subscription })
+      });
+
+      if (!res.ok) throw new Error('Could not save your setup. Please try again.');
+
+      enableBtn.textContent = 'Enabled \u2713';
+      statusText.textContent = "You're all set. You'll be notified if they need help.";
+    } catch (err) {
+      enableBtn.disabled = false;
+      enableBtn.textContent = 'Enable Notifications';
+      errorText.textContent = err && err.message ? err.message : 'Something went wrong. Please try again.';
+    }
+  });
+
+  checkExistingStatus();
+</script>
+</body>
+</html>

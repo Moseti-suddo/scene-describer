@@ -19,10 +19,14 @@
   #app {
     position: fixed;
     inset: 0;
+    bottom: 68px; /* leave room for navbar */
     display: flex;
     flex-direction: column;
     padding: 16px;
   }
+  .view { display: none; flex-direction: column; height: 100%; }
+  .view.active { display: flex; }
+
   h1 {
     font-size: 20px;
     font-weight: 700;
@@ -120,9 +124,80 @@
 
   .tap-layer {
     position: fixed;
-    inset: 0;
+    top: 0; left: 0; right: 0;
+    bottom: 68px;
     z-index: 1;
   }
+
+  /* ---------- SOS screen ---------- */
+  .sos-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    margin-top: 8px;
+  }
+  .contact-status {
+    font-size: 17px;
+    color: #fff;
+    margin-bottom: 18px;
+    font-weight: 600;
+  }
+  .big-btn {
+    width: 100%;
+    padding: 26px 16px;
+    font-size: 24px;
+    font-weight: 800;
+    background: #FF3B30;
+    color: #fff;
+    border: none;
+    border-radius: 16px;
+    letter-spacing: 0.5px;
+  }
+  .big-btn:focus-visible { outline: 4px solid #FFFFFF; outline-offset: 3px; }
+  .secondary-link-btn {
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    background: transparent;
+    color: #FFD400;
+    border: 2px solid #FFD400;
+    border-radius: 10px;
+  }
+  .sos-help-text {
+    color: #999;
+    font-size: 14px;
+    margin-top: 18px;
+    line-height: 1.5;
+  }
+
+  /* ---------- Bottom navbar ---------- */
+  .navbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 68px;
+    display: flex;
+    z-index: 10;
+    background: #0a0a0a;
+    border-top: 2px solid #333;
+  }
+  .nav-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav-btn.active { color: #FFD400; }
+  .nav-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: -3px; }
 
   .sr-only {
     position: absolute;
@@ -134,28 +209,51 @@
 </style>
 </head>
 <body>
+
 <div id="app">
-  <h1>Scene Describer</h1>
 
-  <div class="video-frame">
-    <video id="video" autoplay playsinline muted aria-hidden="true"></video>
-    <canvas id="canvas"></canvas>
-    <div class="state-ring" id="stateRing"></div>
-    <button class="switch-btn" id="switchBtn">Switch camera</button>
+  <div class="view active" id="homeView">
+    <h1>Scene Describer</h1>
+
+    <div class="video-frame">
+      <video id="video" autoplay playsinline muted aria-hidden="true"></video>
+      <canvas id="canvas"></canvas>
+      <div class="state-ring" id="stateRing"></div>
+      <button class="switch-btn" id="switchBtn">Switch camera</button>
+    </div>
+
+    <div class="status-badge" id="status" role="status" aria-live="polite">Starting camera…</div>
+    <div class="error" id="error" role="alert"></div>
+
+    <div class="result empty" id="result" aria-live="polite">
+      Double-tap anywhere on the screen to start. Then just talk.
+    </div>
+
+    <div class="tap-hint" id="tapHint">Double-tap anywhere to begin</div>
   </div>
 
-  <div class="status-badge" id="status" role="status" aria-live="polite">Starting camera…</div>
-  <div class="error" id="error" role="alert"></div>
-
-  <div class="result empty" id="result" aria-live="polite">
-    Double-tap anywhere on the screen to start. Then just talk.
+  <div class="view" id="sosView">
+    <h1>Emergency SOS</h1>
+    <div class="sos-card">
+      <div class="contact-status" id="contactStatus">No emergency contact set yet.</div>
+      <button class="big-btn" id="sendSosBtn">Send SOS Now</button>
+      <button class="secondary-link-btn" id="changeContactBtn">Set / change emergency contact</button>
+    </div>
+    <div class="sos-help-text">
+      You can also long-press anywhere on the screen, or say "emergency" or "help me", to send an SOS at any time — from any screen.
+      Say "did they confirm" to check if your contact has responded, or "is my contact confirmed" to check their setup status.
+    </div>
   </div>
 
-  <div class="tap-hint" id="tapHint">Double-tap anywhere to begin</div>
 </div>
 
-<!-- Full-screen invisible layer so a double-tap ANYWHERE activates listening -->
+<!-- Full-screen invisible layer so double-tap / long-press work ANYWHERE -->
 <div class="tap-layer" id="tapLayer"></div>
+
+<nav class="navbar" id="navbar">
+  <button class="nav-btn active" data-tab="home">Home</button>
+  <button class="nav-btn" data-tab="sos">SOS</button>
+</nav>
 
 <script>
   const video = document.getElementById('video');
@@ -167,10 +265,17 @@
   const switchBtn = document.getElementById('switchBtn');
   const tapLayer = document.getElementById('tapLayer');
   const tapHint = document.getElementById('tapHint');
+  const navbar = document.getElementById('navbar');
+  const homeView = document.getElementById('homeView');
+  const sosView = document.getElementById('sosView');
+  const contactStatusEl = document.getElementById('contactStatus');
+  const sendSosBtn = document.getElementById('sendSosBtn');
+  const changeContactBtn = document.getElementById('changeContactBtn');
 
   let currentStream = null;
   let facingMode = 'environment';
   let hasAnnouncedInstructions = false;
+  let currentTab = 'home';
 
   // Conversation state: the photo currently being discussed, plus the
   // back-and-forth so far. A fresh "describe" resets both.
@@ -180,11 +285,33 @@
   // App state machine: 'idle' | 'listening' | 'thinking' | 'speaking'
   let appState = 'idle';
 
+  // ---------- Emergency contact + SOS state ----------
+  let emergencyContact = null;
+  try {
+    emergencyContact = JSON.parse(localStorage.getItem('emergencyContact') || 'null');
+  } catch (e) { emergencyContact = null; }
+
+  let ownerId = localStorage.getItem('ownerId');
+  if (!ownerId) {
+    ownerId = (crypto.randomUUID ? crypto.randomUUID() : 'owner-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+    localStorage.setItem('ownerId', ownerId);
+  }
+
+  let contactSetupInProgress = false;
+  let awaitingContactConfirmation = false;
+  let pendingContactDigits = null;
+  let activeSosId = null;
+
   const DESCRIBE_KEYWORDS = [
     'describe', 'what is around', "what's around", 'look around',
     'new picture', 'take a picture', 'whats here', "what's here",
     'start over', 'new scene', 'look again'
   ];
+  const EMERGENCY_KEYWORDS = ['sos', 'emergency', 'help me', 'send help', 'i need help'];
+  const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help'];
+  const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact'];
+  const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed'];
+  const CONTACT_STATUS_KEYWORDS = ['is my contact confirmed', 'check my contact', 'contact status', 'is my contact set up'];
 
   function setState(state) {
     appState = state;
@@ -208,6 +335,10 @@
     window.speechSynthesis.speak(utter);
   }
 
+  function speakAsync(text) {
+    return new Promise(resolve => speak(text, resolve));
+  }
+
   function appendTurn(role, text) {
     if (resultEl.classList.contains('empty')) {
       resultEl.classList.remove('empty');
@@ -219,6 +350,53 @@
     resultEl.appendChild(div);
     resultEl.scrollTop = resultEl.scrollHeight;
   }
+
+  function resetToIdle() {
+    setState('idle');
+    setStatus('Ready. Double-tap anywhere to talk again.');
+    tapHint.textContent = 'Double-tap anywhere to begin';
+  }
+
+  // ---------- Tabs ----------
+  function setTab(tab) {
+    currentTab = tab;
+    homeView.classList.toggle('active', tab === 'home');
+    sosView.classList.toggle('active', tab === 'sos');
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    if (tab === 'sos') {
+      renderSosScreen();
+      if (emergencyContact && !emergencyContact.confirmed) {
+        checkContactConfirmation({ speakResult: false });
+      }
+    }
+  }
+
+  navbar.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setTab(btn.dataset.tab);
+    });
+  });
+
+  function renderSosScreen() {
+    if (!emergencyContact) {
+      contactStatusEl.textContent = 'No emergency contact set yet.';
+      return;
+    }
+    const confirmLabel = emergencyContact.confirmed
+      ? 'confirmed and ready'
+      : 'invited, waiting for them to confirm';
+    contactStatusEl.textContent = `Emergency contact: ${spacedDigits(emergencyContact.phone)} (${confirmLabel})`;
+  }
+
+  sendSosBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!emergencyContact) { startContactSetup(); } else { triggerSOS(); }
+  });
+  changeContactBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    startContactSetup();
+  });
 
   // ---------- Camera ----------
   async function startCamera() {
@@ -235,12 +413,17 @@
       await video.play();
       setStatus('Ready. Double-tap anywhere to begin.');
 
-      // Speak the instructions out loud once, since a blind user can't
-      // read the on-screen text. Only on the very first successful start,
-      // not when switching cameras afterward.
       if (!hasAnnouncedInstructions) {
         hasAnnouncedInstructions = true;
-        speak('Voice control active. Double-tap anywhere on the screen to speak.');
+        speak(
+          'Voice control active. Double-tap anywhere on the screen to speak. ' +
+          'Long-press anywhere, or say emergency, to send an S O S alert.',
+          () => {
+            if (!emergencyContact) {
+              speak('No emergency contact is set yet. Long-press anywhere to add one.');
+            }
+          }
+        );
       }
     } catch (err) {
       setStatus('');
@@ -320,7 +503,7 @@
     });
   }
 
-  // ---------- Backend call ----------
+  // ---------- Backend call (scene description) ----------
   async function askBackend({ question }) {
     setState('thinking');
     setStatus('Thinking…');
@@ -352,7 +535,6 @@
     const answer = (data.description || '').trim();
     if (!answer) throw new Error('Empty response');
 
-    // Record this turn in the conversation.
     const userTurnText = question && question.trim()
       ? question.trim()
       : 'Describe what is in front of me.';
@@ -373,20 +555,223 @@
     return DESCRIBE_KEYWORDS.some(k => lower.includes(k));
   }
 
+  // ---------- Emergency contact setup (voice-driven) ----------
+  function spacedDigits(digits) {
+    return (digits || '').split('').join(' ');
+  }
+
+  async function saveEmergencyContact(digits) {
+    emergencyContact = { phone: digits, confirmed: false };
+    localStorage.setItem('emergencyContact', JSON.stringify(emergencyContact));
+    renderSosScreen();
+
+    // Register the pending contact on the server, then send them an
+    // invite so they can complete the required notification setup.
+    try {
+      await fetch('/api/contact-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner: ownerId, phone: digits })
+      });
+    } catch (e) {
+      // If this fails, they can still be reached by SMS at SOS time;
+      // push just won't be available until this succeeds.
+    }
+
+    const inviteLink = `${window.location.origin}/join.html?owner=${encodeURIComponent(ownerId)}`;
+    const inviteMessage = `You've been added as an emergency contact on Scene Describer. Tap to finish setup: ${inviteLink}`;
+    window.location.href = `sms:${digits}?body=${encodeURIComponent(inviteMessage)}`;
+  }
+
+  async function checkContactConfirmation({ speakResult = true } = {}) {
+    if (!emergencyContact) {
+      if (speakResult) await speakAsync('No emergency contact is set yet.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/contact-status?owner=' + encodeURIComponent(ownerId));
+      const data = await res.json();
+      const confirmed = !!data.confirmed;
+
+      emergencyContact.confirmed = confirmed;
+      localStorage.setItem('emergencyContact', JSON.stringify(emergencyContact));
+      renderSosScreen();
+
+      if (speakResult) {
+        await speakAsync(confirmed
+          ? 'Yes, your emergency contact has completed setup and is ready.'
+          : 'Not yet. They still need to tap the link you sent them.');
+      }
+    } catch (e) {
+      if (speakResult) await speakAsync('I could not check right now. Try again in a moment.');
+    }
+  }
+
+  async function startContactSetup() {
+    if (contactSetupInProgress) return;
+    contactSetupInProgress = true;
+    awaitingContactConfirmation = false;
+    pendingContactDigits = null;
+
+    await speakAsync("Please say your emergency contact's phone number.");
+    const digitsText = voiceSupported ? await listenOnce({ timeoutMs: 8000 }) : null;
+    const digits = (digitsText || '').replace(/\D/g, '');
+
+    if (!digits || digits.length < 7) {
+      contactSetupInProgress = false;
+      setState('idle');
+      await speakAsync("I didn't catch a valid phone number. Long-press anywhere to try again.");
+      return;
+    }
+
+    pendingContactDigits = digits;
+    awaitingContactConfirmation = true;
+    contactSetupInProgress = false;
+    setState('idle');
+    await speakAsync(`I heard ${spacedDigits(digits)}. Long-press to confirm, or double-tap to try again.`);
+  }
+
+  // ---------- SOS trigger ----------
+  function getPositionPromise(opts) {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return; }
+      navigator.geolocation.getCurrentPosition(resolve, reject, opts);
+    });
+  }
+
+  async function triggerSOS() {
+    if (!emergencyContact) {
+      await speakAsync('No emergency contact is set. Long-press anywhere to set one now.');
+      resetToIdle();
+      return;
+    }
+
+    setState('thinking');
+    setStatus('Preparing emergency alert…');
+    await speakAsync('Preparing your emergency alert.');
+
+    let lat = null, lng = null;
+    try {
+      const pos = await getPositionPromise({ timeout: 8000 });
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+    } catch (e) {
+      // Proceed without location rather than blocking the alert entirely.
+    }
+
+    let id = null;
+    let pushSent = false;
+    try {
+      const res = await fetch('/api/sos-create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng, owner: ownerId })
+      });
+      const data = await res.json();
+      if (res.ok) { id = data.id; pushSent = !!data.pushSent; }
+    } catch (e) {
+      // Alert can still be sent without a confirmation link.
+    }
+
+    activeSosId = id;
+
+    const mapPart = (lat && lng) ? `My location: https://maps.google.com/?q=${lat},${lng}. ` : '';
+    const confirmPart = id ? `Confirm you are coming: ${window.location.origin}/confirm.html?id=${id}` : '';
+    const message = `SOS! I need help. ${mapPart}${confirmPart}`.trim();
+    const smsUri = `sms:${emergencyContact.phone}?body=${encodeURIComponent(message)}`;
+
+    const pushNote = pushSent ? ' A push notification was also sent to them.' : '';
+    await speakAsync('Emergency message ready. Please send it now.' + pushNote + ' Say did they confirm, any time, to check for a response.');
+    window.location.href = smsUri;
+
+    setState('idle');
+    setStatus('Emergency message opened. Say "did they confirm" any time to check.');
+  }
+
+  function triggerCall() {
+    if (!emergencyContact) { speak('No emergency contact is set. Long-press anywhere to set one now.'); return; }
+    speak('Calling your emergency contact.', () => {
+      window.location.href = `tel:${emergencyContact.phone}`;
+    });
+  }
+
+  function triggerWhatsapp() {
+    if (!emergencyContact) { speak('No emergency contact is set. Long-press anywhere to set one now.'); return; }
+    const waNumber = emergencyContact.phone.startsWith('0')
+      ? '254' + emergencyContact.phone.slice(1)
+      : emergencyContact.phone;
+    const message = 'SOS! I need help.';
+    speak('Opening WhatsApp.', () => {
+      window.location.href = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+    });
+  }
+
+  async function checkSosConfirmation() {
+    if (!activeSosId) {
+      await speakAsync('No emergency alert has been sent yet.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/sos-status?id=' + encodeURIComponent(activeSosId));
+      const data = await res.json();
+      if (data.status === 'confirmed') {
+        await speakAsync('Yes! Your emergency contact confirmed they are on the way.');
+      } else {
+        await speakAsync('Not yet. They have not confirmed.');
+      }
+    } catch (e) {
+      await speakAsync('I could not check right now. Try again in a moment.');
+    }
+  }
+
+  async function handleEmergencyIntent() {
+    if (!emergencyContact) {
+      await speakAsync('No emergency contact is set. Long-press anywhere to set one now.');
+      resetToIdle();
+    } else {
+      await triggerSOS();
+    }
+  }
+
   // ---------- The core interaction loop ----------
   async function runInteractionCycle(initialSpeech) {
     let speechText = initialSpeech;
 
-    // First activation (double-tap): no speech captured yet unless voice
-    // recognition ran as part of the tap itself. If nothing was said, or it
-    // sounds like a request for a fresh scene, treat it as "describe now".
     if (speechText === undefined) {
       speechText = voiceSupported ? await listenOnce({ timeoutMs: 4000 }) : null;
     }
 
+    if (speechText) {
+      const lower = speechText.toLowerCase();
+
+      if (EMERGENCY_KEYWORDS.some(k => lower.includes(k))) {
+        await handleEmergencyIntent();
+        return;
+      }
+      if (CALL_KEYWORDS.some(k => lower.includes(k))) {
+        triggerCall();
+        resetToIdle();
+        return;
+      }
+      if (WHATSAPP_KEYWORDS.some(k => lower.includes(k))) {
+        triggerWhatsapp();
+        resetToIdle();
+        return;
+      }
+      if (CHECK_CONFIRM_KEYWORDS.some(k => lower.includes(k))) {
+        await checkSosConfirmation();
+        resetToIdle();
+        return;
+      }
+      if (CONTACT_STATUS_KEYWORDS.some(k => lower.includes(k))) {
+        await checkContactConfirmation();
+        resetToIdle();
+        return;
+      }
+    }
+
     const wantsFreshScene = !speechText || looksLikeFreshSceneRequest(speechText);
     if (wantsFreshScene) {
-      // A fresh scene request always resets the conversation.
       activeImageBase64 = null;
       conversationHistory = [];
     }
@@ -398,7 +783,6 @@
 
       await new Promise(resolve => speak(answer, resolve));
 
-      // Auto-listen for a follow-up without requiring another tap.
       setState('listening');
       setStatus('Listening for a follow-up… or stay quiet to finish.');
       const followUp = voiceSupported ? await listenOnce({ timeoutMs: 5000 }) : null;
@@ -406,45 +790,89 @@
       if (followUp) {
         await runInteractionCycle(followUp);
       } else {
-        setState('idle');
-        setStatus('Ready. Double-tap anywhere to talk again.');
-        tapHint.textContent = 'Double-tap anywhere to begin';
+        resetToIdle();
       }
     } catch (err) {
-      setError("Something went wrong. Double-tap to try again.");
-      setState('idle');
-      setStatus('');
-      tapHint.textContent = 'Double-tap anywhere to begin';
+      setError('Something went wrong. Double-tap to try again.');
+      resetToIdle();
     }
   }
 
-  // ---------- Double-tap detection, anywhere on screen ----------
+  // ---------- Gesture handling: double-tap (anywhere) + long-press (anywhere) ----------
   let lastTapTime = 0;
   const DOUBLE_TAP_WINDOW_MS = 400;
+  let longPressTimer = null;
+  let longPressFired = false;
+  const LONG_PRESS_MS = 2000;
 
-  function handleActivationTap(e) {
-    // Ignore taps on the switch-camera button; it has its own handler.
-    if (e.target.closest && e.target.closest('.switch-btn')) return;
+  function handleLongPressTrigger() {
+    if (contactSetupInProgress) return;
+
+    if (awaitingContactConfirmation) {
+      const digits = pendingContactDigits;
+      awaitingContactConfirmation = false;
+      pendingContactDigits = null;
+      speak('Emergency contact saved. Opening a message to invite them now.', () => {
+        saveEmergencyContact(digits);
+      });
+      return;
+    }
+
+    if (!emergencyContact) {
+      startContactSetup();
+      return;
+    }
+
+    triggerSOS();
+  }
+
+  function handleTapRelease(e) {
+    if (e.target && e.target.closest && e.target.closest('.switch-btn')) return;
 
     const now = Date.now();
     const isDoubleTap = (now - lastTapTime) < DOUBLE_TAP_WINDOW_MS;
     lastTapTime = now;
 
     if (!isDoubleTap) return;
-    if (appState === 'listening' || appState === 'thinking') return; // already active
+
+    if (awaitingContactConfirmation) {
+      awaitingContactConfirmation = false;
+      pendingContactDigits = null;
+      startContactSetup();
+      return;
+    }
+
+    if (appState === 'listening' || appState === 'thinking') return;
+    if (contactSetupInProgress) return;
 
     window.speechSynthesis.cancel();
     runInteractionCycle(undefined);
   }
 
-  tapLayer.addEventListener('touchend', handleActivationTap, { passive: true });
-  tapLayer.addEventListener('click', handleActivationTap);
+  tapLayer.addEventListener('pointerdown', () => {
+    longPressFired = false;
+    longPressTimer = setTimeout(() => {
+      longPressFired = true;
+      handleLongPressTrigger();
+    }, LONG_PRESS_MS);
+  });
+
+  tapLayer.addEventListener('pointerup', (e) => {
+    clearTimeout(longPressTimer);
+    if (longPressFired) return;
+    handleTapRelease(e);
+  });
+
+  tapLayer.addEventListener('pointercancel', () => {
+    clearTimeout(longPressTimer);
+  });
 
   // ---------- Init ----------
   if (!voiceSupported) {
-    setError('Voice recognition is not supported in this browser. Double-tap will still describe the scene, but spoken follow-up questions will not work here.');
+    setError('Voice recognition is not supported in this browser. Double-tap will still describe the scene, but spoken commands (follow-ups, SOS, etc.) will not work here.');
   }
 
+  renderSosScreen();
   startCamera();
 </script>
 </body>
