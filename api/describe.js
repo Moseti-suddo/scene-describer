@@ -108,6 +108,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('Bedrock error:', err);
-    return res.status(500).json({ error: 'Something went wrong on the server' });
+    const detail = err && err.name ? `${err.name}: ${err.message || ''}`.trim() : (err && err.message) || 'Unknown error';
+    return res.status(500).json({ error: `Bedrock request failed (${detail})` });
   }
 }
