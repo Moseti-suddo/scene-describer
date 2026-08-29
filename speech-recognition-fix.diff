@@ -1,0 +1,90 @@
+diff --git a/index.html b/index.html
+index 3552dcb..d6e52d5 100644
+--- a/index.html
++++ b/index.html
+@@ -459,46 +459,58 @@
+     recognizer.maxAlternatives = 1;
+   }
+ 
++  let recognizerActive = false;
++
+   function listenOnce({ timeoutMs = 6000 } = {}) {
+     return new Promise((resolve) => {
+       if (!voiceSupported) { resolve(null); return; }
+ 
++      // Guard: if a previous session is still tearing down, don't call
++      // start() again yet — the browser will throw "already started".
++      if (recognizerActive) { resolve(null); return; }
++
+       setState('listening');
+       setStatus('Listening…');
+       tapHint.textContent = '';
+ 
+-      let settled = false;
+-      const finish = (val) => {
+-        if (settled) return;
+-        settled = true;
+-        try { recognizer.stop(); } catch (e) {}
+-        resolve(val);
+-      };
+-
+-      const timer = setTimeout(() => finish(null), timeoutMs);
++      let resultText = null;
++      let timer = null;
+ 
++      // IMPORTANT: we only resolve the promise from onend, never directly
++      // from onresult/onerror/timeout. The Web Speech API only guarantees
++      // it's safe to call start() again once onend has actually fired, so
++      // resolving early (and letting the caller immediately listen again)
++      // is what caused "recognition has already started" errors.
+       recognizer.onresult = (event) => {
+-        clearTimeout(timer);
+-        const text = event.results?.[0]?.[0]?.transcript || '';
+-        finish(text.trim());
++        resultText = (event.results?.[0]?.[0]?.transcript || '').trim();
+       };
+       recognizer.onerror = (event) => {
+-        clearTimeout(timer);
+         if (event && event.error === 'not-allowed') {
+           setError('Microphone access is blocked for this site. Check Chrome site settings and allow the microphone, then reload.');
+         } else if (event && event.error && event.error !== 'no-speech' && event.error !== 'aborted') {
+           setError('Voice recognition error: ' + event.error);
+         }
+-        finish(null);
++        // Don't resolve here — onend always fires after onerror and will
++        // finish things up.
++      };
++      recognizer.onend = () => {
++        clearTimeout(timer);
++        recognizerActive = false;
++        resolve(resultText);
+       };
+-      recognizer.onend = () => { clearTimeout(timer); finish(null); };
+ 
++      timer = setTimeout(() => {
++        try { recognizer.stop(); } catch (e) { recognizerActive = false; resolve(resultText); }
++      }, timeoutMs);
++
++      recognizerActive = true;
+       try {
+         recognizer.start();
+       } catch (e) {
+         clearTimeout(timer);
++        recognizerActive = false;
+         setError('Could not start voice recognition: ' + (e && e.message ? e.message : e));
+-        finish(null);
++        resolve(null);
+       }
+     });
+   }
+@@ -807,6 +819,10 @@
+ 
+   function handleLongPressTrigger() {
+     if (contactSetupInProgress) return;
++    // Don't interrupt an in-flight listen/backend call — doing so left the
++    // shared recognizer mid-session and caused SOS/contact setup to fail
++    // with "recognition has already started".
++    if (appState === 'listening' || appState === 'thinking') return;
+ 
+     if (awaitingContactConfirmation) {
+       const digits = pendingContactDigits;

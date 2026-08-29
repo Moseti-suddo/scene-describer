@@ -122,13 +122,6 @@
   }
   .switch-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 
-  .tap-layer {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    bottom: 68px;
-    z-index: 1;
-  }
-
   /* ---------- SOS screen ---------- */
   .sos-card {
     background: #111;
@@ -317,9 +310,6 @@
 
 </div>
 
-<!-- Full-screen invisible layer so double-tap / long-press work ANYWHERE -->
-<div class="tap-layer" id="tapLayer"></div>
-
 <nav class="navbar" id="navbar">
   <button class="nav-btn active" data-tab="home">Home</button>
   <button class="nav-btn" data-tab="sos">SOS</button>
@@ -336,7 +326,6 @@
   const resultEl = document.getElementById('result');
   const stateRing = document.getElementById('stateRing');
   const switchBtn = document.getElementById('switchBtn');
-  const tapLayer = document.getElementById('tapLayer');
   const tapHint = document.getElementById('tapHint');
   const navbar = document.getElementById('navbar');
   const homeView = document.getElementById('homeView');
@@ -1050,6 +1039,15 @@
   let longPressFired = false;
   const LONG_PRESS_MS = 2000;
 
+  // Real interactive elements (buttons, links, inputs, the navbar) must
+  // always get their own native click behavior. Bailing out early here,
+  // on both press and release, is what fixes the buttons being swallowed —
+  // previously the full-screen tap-layer sat above them due to how
+  // `position: fixed` stacking works, so their clicks never landed at all.
+  function isRealControl(target) {
+    return !!(target && target.closest && target.closest('button, a, input, textarea, select, .navbar'));
+  }
+
   function handleLongPressTrigger() {
     if (contactSetupInProgress) return;
     // Don't interrupt an in-flight listen/backend call — doing so left the
@@ -1080,8 +1078,6 @@
   }
 
   function handleTapRelease(e) {
-    if (e.target && e.target.closest && e.target.closest('.switch-btn')) return;
-
     const now = Date.now();
     const isDoubleTap = (now - lastTapTime) < DOUBLE_TAP_WINDOW_MS;
     lastTapTime = now;
@@ -1102,7 +1098,8 @@
     runInteractionCycle(undefined);
   }
 
-  tapLayer.addEventListener('pointerdown', () => {
+  document.addEventListener('pointerdown', (e) => {
+    if (isRealControl(e.target)) return;
     longPressFired = false;
     longPressTimer = setTimeout(() => {
       longPressFired = true;
@@ -1110,13 +1107,14 @@
     }, LONG_PRESS_MS);
   });
 
-  tapLayer.addEventListener('pointerup', (e) => {
+  document.addEventListener('pointerup', (e) => {
     clearTimeout(longPressTimer);
     if (longPressFired) return;
+    if (isRealControl(e.target)) return;
     handleTapRelease(e);
   });
 
-  tapLayer.addEventListener('pointercancel', () => {
+  document.addEventListener('pointercancel', () => {
     clearTimeout(longPressTimer);
   });
 
