@@ -256,6 +256,104 @@
     font-size: 12px;
     font-weight: 700;
   }
+
+  /* ---------- Places / Navigation screen ---------- */
+  .places-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 8px;
+  }
+  .saved-places-list { margin-bottom: 4px; }
+  .saved-place-btn {
+    position: relative;
+    z-index: 5;
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    background: #000;
+    border: 2px solid #333;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .saved-place-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 1px; }
+  .saved-place-btn .visit-count {
+    display: block;
+    font-size: 12px;
+    color: #888;
+    font-weight: 400;
+    margin-top: 2px;
+  }
+  .no-places-text {
+    color: #888;
+    font-size: 15px;
+    margin: 4px 0 14px;
+  }
+  .manual-dest-row {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .manual-dest-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 12px;
+    font-size: 15px;
+    background: #000;
+    color: #FFFFFF;
+    border: 2px solid #333;
+    border-radius: 10px;
+  }
+  .manual-dest-row input:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 1px; }
+  .manual-dest-row button {
+    margin-top: 0;
+    width: auto;
+    padding: 12px 18px;
+  }
+  .nav-progress-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .nav-meta {
+    color: #999;
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  .nav-step-text {
+    color: #fff;
+    font-size: 19px;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+  .next-step-btn {
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    padding: 22px;
+    font-size: 19px;
+    font-weight: 800;
+    background: #FFD400;
+    color: #000;
+    border: none;
+    border-radius: 14px;
+  }
+  .next-step-btn:focus-visible { outline: 4px solid #FFFFFF; outline-offset: 3px; }
+  .places-help-text {
+    color: #999;
+    font-size: 14px;
+    margin-top: 18px;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
@@ -308,11 +406,37 @@
     </div>
   </div>
 
+  <div class="view" id="placesView">
+    <h1>Places</h1>
+    <div class="places-card">
+      <div class="saved-places-list" id="savedPlacesList"></div>
+      <button class="secondary-link-btn" id="newDestinationBtn" type="button">Where do you want to go? (voice)</button>
+      <div class="manual-dest-row">
+        <input type="text" id="manualDestInput" placeholder="Or type a destination" />
+        <button class="secondary-link-btn" id="manualDestGoBtn" type="button">Go</button>
+      </div>
+    </div>
+
+    <div class="nav-progress-card" id="navProgressCard" style="display:none;">
+      <div class="nav-meta" id="navMeta"></div>
+      <div class="nav-step-text" id="navStepText"></div>
+      <button class="next-step-btn" id="nextStepBtn" type="button">Next</button>
+    </div>
+
+    <div class="places-help-text">
+      You can also say "navigate to", "take me to", or "directions to" followed by a place, from any screen.
+      While a route is playing, say "next", or tap Next, to hear the next step.
+      <br /><br />
+      Prototype note: this plays back a real walking route step by step. It does not yet track your live position, so steps advance manually rather than automatically as you walk.
+    </div>
+  </div>
+
 </div>
 
 <nav class="navbar" id="navbar">
   <button class="nav-btn active" data-tab="home">Home</button>
   <button class="nav-btn" data-tab="sos">SOS</button>
+  <button class="nav-btn" data-tab="places">Places</button>
 </nav>
 
 <script>
@@ -335,6 +459,15 @@
   const changeContactBtn = document.getElementById('changeContactBtn');
   const manualContactInput = document.getElementById('manualContactInput');
   const manualContactSaveBtn = document.getElementById('manualContactSaveBtn');
+  const placesView = document.getElementById('placesView');
+  const savedPlacesListEl = document.getElementById('savedPlacesList');
+  const newDestinationBtn = document.getElementById('newDestinationBtn');
+  const manualDestInput = document.getElementById('manualDestInput');
+  const manualDestGoBtn = document.getElementById('manualDestGoBtn');
+  const navProgressCard = document.getElementById('navProgressCard');
+  const navMetaEl = document.getElementById('navMeta');
+  const navStepTextEl = document.getElementById('navStepText');
+  const nextStepBtn = document.getElementById('nextStepBtn');
 
   let currentStream = null;
   let facingMode = 'environment';
@@ -366,6 +499,23 @@
   let pendingContactDigits = null;
   let activeSosId = null;
 
+  // ---------- Navigation / Places state ----------
+  // savedPlaces: destinations Newton has actually navigated to before,
+  // tracked automatically (no manual "save" step) so frequent places surface
+  // on their own. Purely local — no server round-trip for something this
+  // personal and low-stakes.
+  let savedPlaces = [];
+  try {
+    savedPlaces = JSON.parse(localStorage.getItem('savedPlaces') || '[]');
+  } catch (e) { savedPlaces = []; }
+
+  // activeRoute: the real route returned by /api/navigate for the current
+  // trip, plus which step we're on. There is no live GPS tracking in this
+  // prototype — advancing between steps is manual (voice "next" or a tap),
+  // standing in for what position-tracking would normally trigger.
+  let activeRoute = null;
+  let navigationInProgress = false; // mirrors contactSetupInProgress's guard pattern
+
   const DESCRIBE_KEYWORDS = [
     'describe', 'what is around', "what's around", 'look around',
     'new picture', 'take a picture', 'whats here', "what's here",
@@ -376,6 +526,8 @@
   const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact'];
   const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed'];
   const CONTACT_STATUS_KEYWORDS = ['is my contact confirmed', 'check my contact', 'contact status', 'is my contact set up'];
+  const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to'];
+  const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue'];
 
   function setState(state) {
     appState = state;
@@ -464,12 +616,16 @@
     currentTab = tab;
     homeView.classList.toggle('active', tab === 'home');
     sosView.classList.toggle('active', tab === 'sos');
+    placesView.classList.toggle('active', tab === 'places');
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     if (tab === 'sos') {
       renderSosScreen();
       if (emergencyContact && !emergencyContact.confirmed) {
         checkContactConfirmation({ speakResult: false });
       }
+    }
+    if (tab === 'places') {
+      renderPlacesScreen();
     }
   }
 
@@ -516,6 +672,32 @@
     }
     Promise.resolve(saveEmergencyContact(digits)).catch((err) => {
       setError('Saving contact failed: ' + (err && err.message ? err.message : err));
+    });
+  });
+
+  newDestinationBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setError('');
+    Promise.resolve(startNavigationByVoice()).catch((err) => {
+      setError('Navigation failed: ' + (err && err.message ? err.message : err));
+    });
+  });
+  manualDestGoBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setError('');
+    const text = (manualDestInput.value || '').trim();
+    if (!text) {
+      setError('Type a destination first.');
+      return;
+    }
+    Promise.resolve(startNavigationToText(text)).catch((err) => {
+      setError('Navigation failed: ' + (err && err.message ? err.message : err));
+    });
+  });
+  nextStepBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    Promise.resolve(advanceToNextStep()).catch((err) => {
+      setError('Navigation error: ' + (err && err.message ? err.message : err));
     });
   });
 
@@ -967,6 +1149,166 @@
     }
   }
 
+  // ---------- Places screen rendering ----------
+  function renderPlacesScreen() {
+    if (!savedPlaces.length) {
+      savedPlacesListEl.innerHTML = '<div class="no-places-text">No saved places yet. Navigate somewhere and it will show up here.</div>';
+      return;
+    }
+    // Frequency first, recency as the tiebreaker — favors places Newton
+    // actually goes back to, not just the most recent one-off trip.
+    const sorted = [...savedPlaces]
+      .sort((a, b) => (b.visitCount - a.visitCount) || (b.lastUsedAt - a.lastUsedAt))
+      .slice(0, 5);
+
+    savedPlacesListEl.innerHTML = '';
+    sorted.forEach(place => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'saved-place-btn';
+      const times = place.visitCount === 1 ? 'time' : 'times';
+      btn.innerHTML = `${place.name}<span class="visit-count">Visited ${place.visitCount} ${times}</span>`;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        Promise.resolve(startNavigationToText(place.name)).catch((err) => {
+          setError('Navigation failed: ' + (err && err.message ? err.message : err));
+        });
+      });
+      savedPlacesListEl.appendChild(btn);
+    });
+  }
+
+  // Haversine distance in meters — used only to decide whether a completed
+  // trip's endpoint matches a place Newton's already been to, so repeat
+  // visits increment a count instead of piling up near-duplicate entries.
+  function distanceMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const toRad = deg => deg * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  function recordPlaceVisit(name, lat, lng) {
+    const SAME_PLACE_RADIUS_METERS = 50;
+    const existing = savedPlaces.find(p => distanceMeters(p.lat, p.lng, lat, lng) < SAME_PLACE_RADIUS_METERS);
+    if (existing) {
+      existing.visitCount += 1;
+      existing.lastUsedAt = Date.now();
+    } else {
+      savedPlaces.push({ name, lat, lng, visitCount: 1, lastUsedAt: Date.now() });
+    }
+    localStorage.setItem('savedPlaces', JSON.stringify(savedPlaces));
+  }
+
+  // ---------- Navigation flow ----------
+  // beginRoute does the real work: reads current position once, calls
+  // /api/navigate for a real geocoded destination + real walking directions,
+  // then speaks the first step. There is no GPS tracking after this point —
+  // advanceToNextStep() is what moves through the remaining steps, triggered
+  // manually rather than by detected movement.
+  async function beginRoute(destinationText) {
+    setError('');
+    activeRoute = null;
+    navProgressCard.style.display = 'none';
+
+    await speakAsync(`Getting directions to ${destinationText}.`);
+
+    let lat, lng;
+    try {
+      const pos = await getPositionPromise({ timeout: 8000 });
+      lat = pos.coords.latitude;
+      lng = pos.coords.longitude;
+    } catch (e) {
+      await speakAsync('I could not get your current location. Please enable location access and try again.');
+      return;
+    }
+
+    let data;
+    try {
+      const res = await fetch('/api/navigate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinationText, lat, lng })
+      });
+      data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not get directions');
+    } catch (err) {
+      const msg = err && err.message ? err.message : 'Something went wrong getting directions.';
+      setError('Navigation failed: ' + msg);
+      await speakAsync(msg);
+      return;
+    }
+
+    activeRoute = {
+      destinationName: data.destinationName,
+      destLat: data.destinationLat,
+      destLng: data.destinationLng,
+      steps: data.steps,
+      currentStepIndex: 0,
+      totalDistanceText: data.totalDistanceText,
+      totalDurationText: data.totalDurationText
+    };
+
+    navProgressCard.style.display = 'block';
+    navMetaEl.textContent = `${activeRoute.destinationName} — ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking`;
+
+    await speakAsync(`Route to ${activeRoute.destinationName}. Total distance ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking.`);
+    await speakCurrentStep();
+  }
+
+  async function speakCurrentStep() {
+    if (!activeRoute) return;
+    const step = activeRoute.steps[activeRoute.currentStepIndex];
+    navStepTextEl.textContent = `Step ${step.stepNumber}: ${step.instruction} (${step.distanceText})`;
+    await speakAsync(`${step.instruction}. ${step.distanceText}.`);
+  }
+
+  async function advanceToNextStep() {
+    if (!activeRoute) {
+      await speakAsync('No route is active right now.');
+      return;
+    }
+    activeRoute.currentStepIndex += 1;
+
+    if (activeRoute.currentStepIndex >= activeRoute.steps.length) {
+      await speakAsync(`You've arrived at ${activeRoute.destinationName}.`);
+      recordPlaceVisit(activeRoute.destinationName, activeRoute.destLat, activeRoute.destLng);
+      navProgressCard.style.display = 'none';
+      activeRoute = null;
+      renderPlacesScreen();
+      return;
+    }
+    await speakCurrentStep();
+  }
+
+  async function startNavigationToText(destinationText) {
+    if (navigationInProgress) return;
+    navigationInProgress = true;
+    try {
+      await beginRoute(destinationText);
+    } finally {
+      navigationInProgress = false;
+    }
+  }
+
+  async function startNavigationByVoice() {
+    if (navigationInProgress) return;
+    navigationInProgress = true;
+    try {
+      await speakAsync('Where do you want to go?');
+      const destText = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (!destText || !destText.trim()) {
+        await speakAsync("I didn't catch that. Try again from the Places tab.");
+        return;
+      }
+      await beginRoute(destText.trim());
+    } finally {
+      navigationInProgress = false;
+    }
+  }
+
   // ---------- The core interaction loop ----------
   async function runInteractionCycle(initialSpeech) {
     let speechText = initialSpeech;
@@ -999,6 +1341,25 @@
       }
       if (CONTACT_STATUS_KEYWORDS.some(k => lower.includes(k))) {
         await checkContactConfirmation();
+        resetToIdle();
+        return;
+      }
+      // Only treat "next" as an advance command while a route is actually
+      // active — otherwise a stray "next" in normal conversation would
+      // wrongly get swallowed here instead of reaching the description flow.
+      if (activeRoute && NEXT_STEP_KEYWORDS.some(k => lower === k || lower.includes(k))) {
+        await advanceToNextStep();
+        resetToIdle();
+        return;
+      }
+      const navigateKeyword = NAVIGATE_KEYWORDS.find(k => lower.includes(k));
+      if (navigateKeyword) {
+        const destText = speechText.slice(lower.indexOf(navigateKeyword) + navigateKeyword.length).trim();
+        if (destText) {
+          await startNavigationToText(destText);
+        } else {
+          await startNavigationByVoice();
+        }
         resetToIdle();
         return;
       }
@@ -1124,6 +1485,7 @@
   }
 
   renderSosScreen();
+  renderPlacesScreen();
   startCamera();
 </script>
 </body>
