@@ -2,16 +2,32 @@ import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-r
 
 const MODEL_ID = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
 
-const DEFAULT_DESCRIBE_PROMPT =
-  'You are helping a blind or low-vision person understand their surroundings. ' +
-  'Describe this scene in 2-4 short spoken sentences. Prioritize: what the space is, ' +
-  'key objects and their approximate position (left, right, ahead), any people, and ' +
-  'anything that could be a hazard (steps, obstacles, open doors, spills). Skip filler ' +
-  'like "this image shows". Speak plainly and directly, as if narrating out loud to the person.';
+// Everything the model needs to know about *how* to respond lives here now,
+// in a real system prompt (Bedrock's Converse API supports a dedicated
+// `system` field, separate from the conversation turns). This replaces the
+// old approach of jamming a default-description string or a "keep it short"
+// note directly into user-turn text.
+//
+// Covers three behaviors in one place:
+//   1. Default: describe the scene (used when there's no specific question)
+//   2. Reading mode: if the user's words suggest they want visible text
+//      read aloud (a sign, label, document, screen, menu, etc.), transcribe
+//      it verbatim instead of describing the scene. No keyword list needed —
+//      Claude infers this from the transcribed question, in English,
+//      Swahili, or code-switched phrasing.
+//   3. Follow-ups: keep answers short, same spoken tone.
+const SYSTEM_PROMPT =
+  'You are helping a blind or low-vision person understand their surroundings through a phone camera. ' +
+  'Speak plainly and directly, as if narrating out loud to them — never say things like "this image shows" or "I see". ' +
+  '\n\nIf the user asks you to read, or their words suggest they want visible text read aloud (a sign, label, document, screen, menu, etc.), ' +
+  'transcribe that text verbatim, in natural reading order (top-to-bottom, left-to-right). ' +
+  'If no readable text is visible, say so plainly rather than guessing or describing the scene instead. ' +
+  '\n\nOtherwise, describe the scene in 2-4 short spoken sentences: what the space is, key objects and their approximate position ' +
+  '(left, right, ahead), any people, and anything that could be a hazard (steps, obstacles, open doors, spills). ' +
+  'If there is no specific question, give this default scene description. ' +
+  '\n\nFor any follow-up question, keep the answer short (1-3 sentences) and just as direct.';
 
-const FOLLOW_UP_SYSTEM_NOTE =
-  'Keep answering as if speaking out loud to a blind or low-vision person. ' +
-  'Keep answers short (1-3 sentences) and direct.';
+const DEFAULT_QUESTION_TEXT = 'Describe what is in front of me.';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -25,7 +41,10 @@ export default async function handler(req, res) {
     //          [{ role: 'user' | 'assistant', text: '...' }, ...]. Empty/absent
     //          on the very first turn.
     // question: the new thing the user just said. Empty/absent means
-    //           "give me the default fresh description".
+    //           "give me the default fresh description" — the system prompt
+    //           itself now handles that fallback behavior, so we just pass
+    //           a plain placeholder through rather than swapping in a whole
+    //           separate prompt string.
     const { image, history, question } = req.body;
 
     if (!image) {
@@ -53,15 +72,17 @@ export default async function handler(req, res) {
     const trimmedHistory = priorTurns.slice(-MAX_TURNS);
 
     const messages = [];
+    const questionText = question && question.trim() ? question.trim() : DEFAULT_QUESTION_TEXT;
 
     if (trimmedHistory.length === 0) {
-      // First turn: attach the image alongside either the user's own
-      // question ("what colour is my shirt") or the default scene prompt.
+      // First turn: attach the image alongside whatever the user asked
+      // (or the default placeholder). The system prompt above is what
+      // decides whether this becomes a scene description or a text read-out.
       messages.push({
         role: 'user',
         content: [
           { image: { format: 'jpeg', source: { bytes: imageBytes } } },
-          { text: question && question.trim() ? question.trim() : DEFAULT_DESCRIBE_PROMPT }
+          { text: questionText }
         ]
       });
     } else {
@@ -82,14 +103,18 @@ export default async function handler(req, res) {
         }
       });
 
+      // Plain follow-up text now — no more manually prepending a
+      // "keep it short" note here, since that instruction lives in the
+      // system prompt and applies throughout the whole conversation.
       messages.push({
         role: 'user',
-        content: [{ text: `${FOLLOW_UP_SYSTEM_NOTE}\n\nQuestion: ${question}` }]
+        content: [{ text: questionText }]
       });
     }
 
     const command = new ConverseCommand({
       modelId: MODEL_ID,
+      system: [{ text: SYSTEM_PROMPT }],
       messages,
       inferenceConfig: {
         maxTokens: 700,
