@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Welcome — Scene Describer</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #000; color: #FFD400;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    height: 100%;
+  }
+  #app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 20px 32px;
+  }
+  .step { display: none; flex-direction: column; flex: 1; }
+  .step.active { display: flex; }
+
+  .progress-text {
+    text-align: center;
+    color: #666;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-bottom: 18px;
+  }
+
+  h1 { font-size: 24px; margin: 0 0 8px; text-align: center; }
+  .subtitle { color: #ccc; font-size: 16px; line-height: 1.5; text-align: center; margin: 0 0 24px; }
+
+  .choice-card {
+    position: relative;
+    z-index: 5;
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 20px;
+    margin-bottom: 14px;
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 14px;
+    color: #fff;
+  }
+  .choice-card .choice-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .choice-card .choice-sub { font-size: 14px; color: #999; font-weight: 400; }
+  .choice-card.selected { border-color: #FFD400; background: #1a1600; }
+  .choice-card:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+
+  .spacer { flex: 1; }
+
+  .primary-btn {
+    width: 100%;
+    padding: 20px;
+    font-size: 18px;
+    font-weight: 800;
+    background: #FFD400;
+    color: #000;
+    border: none;
+    border-radius: 14px;
+    margin-top: 10px;
+  }
+  .primary-btn:disabled { opacity: 0.4; }
+  .primary-btn:focus-visible { outline: 4px solid #FFFFFF; outline-offset: 3px; }
+
+  .text-link-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    background: transparent;
+    color: #999;
+    border: none;
+    margin-top: 4px;
+  }
+
+  .toast {
+    position: fixed;
+    left: 20px; right: 20px; bottom: 24px;
+    background: #1a1600;
+    border: 2px solid #FFD400;
+    color: #FFD400;
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    display: none;
+    z-index: 50;
+  }
+  .toast.visible { display: block; }
+
+  /* ---------- Faces screen ---------- */
+  .face-list { margin-bottom: 4px; }
+  .face-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .face-thumb {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #222;
+    flex-shrink: 0;
+  }
+  .face-info { flex: 1; color: #fff; }
+  .face-info .face-name { font-weight: 700; font-size: 15px; }
+  .face-info .face-rel { color: #999; font-size: 13px; }
+
+  .video-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #111;
+    border: 3px solid #FFD400;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .video-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .video-frame canvas { display: none; }
+
+  .photo-strip { display: flex; gap: 8px; margin-bottom: 16px; }
+  .photo-strip img {
+    width: 60px; height: 60px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 2px solid #333;
+  }
+
+  label { display: block; font-size: 14px; color: #ccc; margin-bottom: 6px; }
+  input[type="text"] {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    background: #111;
+    color: #fff;
+    border: 2px solid #444;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+  input[type="text"]:focus-visible { outline: 3px solid #FFD400; outline-offset: 1px; }
+
+  .relationship-row { display: flex; gap: 8px; margin-bottom: 20px; }
+  .relationship-btn {
+    flex: 1;
+    padding: 12px 6px;
+    font-size: 14px;
+    font-weight: 700;
+    background: #111;
+    color: #ccc;
+    border: 2px solid #333;
+    border-radius: 10px;
+  }
+  .relationship-btn.selected { border-color: #FFD400; color: #FFD400; background: #1a1600; }
+
+  /* ---------- Bluetooth screen ---------- */
+  .bt-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 14px;
+    padding: 28px 20px;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .bt-status-text {
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+    min-height: 26px;
+    margin-top: 14px;
+  }
+  .bt-icon { font-size: 40px; }
+
+  /* ---------- Personalization screen ---------- */
+  .field-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .field-card label { color: #fff; font-weight: 700; margin-bottom: 10px; }
+  select {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    background: #000;
+    color: #fff;
+    border: 2px solid #444;
+    border-radius: 10px;
+  }
+  input[type="range"] { width: 100%; margin: 8px 0; }
+  .range-labels { display: flex; justify-content: space-between; font-size: 12px; color: #888; }
+  .segmented { display: flex; gap: 8px; margin-top: 4px; }
+  .segmented button {
+    flex: 1;
+    padding: 10px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #000;
+    color: #ccc;
+    border: 2px solid #333;
+    border-radius: 10px;
+  }
+  .segmented button.selected { border-color: #FFD400; color: #FFD400; background: #1a1600; }
+  .test-voice-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    background: transparent;
+    color: #FFD400;
+    border: 2px solid #FFD400;
+    border-radius: 10px;
+    margin-top: 10px;
+  }
+
+  /* ---------- Tutorial screen ---------- */
+  .command-row {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .command-row .phrase { color: #FFD400; font-weight: 700; font-size: 16px; }
+  .command-row .desc { color: #ccc; font-size: 14px; margin-top: 2px; }
+  .command-row.upcoming { opacity: 0.6; }
+  .command-row.upcoming .phrase::after {
+    content: ' (coming soon)';
+    color: #888;
+    font-weight: 400;
+    font-size: 12px;
+  }
+
+  button { font-family: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Step 0: Welcome -->
+  <div class="step active" id="step-welcome">
+    <div class="spacer"></div>
+    <h1>Welcome to Scene Describer</h1>
+    <p class="subtitle">
+      An accessibility companion that describes your surroundings, reads
+      text aloud, helps you navigate, and keeps you connected to help when
+      you need it. Let's set things up.
+    </p>
+    <div class="spacer"></div>
+    <button class="primary-btn" id="welcomeNextBtn" type="button">Get Started</button>
+  </div>
+
+  <!-- Step 1: Profile type -->
+  <div class="step" id="step-profile">
+    <div class="progress-text">STEP 1 OF 6</div>
+    <h1>Who is this for?</h1>
+    <p class="subtitle">This helps us tailor the experience to you.</p>
+
+    <button class="choice-card" id="profileVisualBtn" type="button">
+      <div class="choice-title">I'm blind or visually impaired</div>
+      <div class="choice-sub">Scene descriptions, text reading, voice-guided navigation</div>
+    </button>
+    <button class="choice-card" id="profileHearingBtn" type="button">
+      <div class="choice-title">I'm deaf or hard of hearing</div>
+      <div class="choice-sub">Coming soon — not yet available</div>
+    </button>
+
+    <div class="spacer"></div>
+    <button class="primary-btn" id="profileNextBtn" type="button" disabled>Continue</button>
+  </div>
+
+  <!-- Step 2: Language -->
+  <div class="step" id="step-language">
+    <div class="progress-text">STEP 2 OF 6</div>
+    <h1>Choose your language</h1>
+    <p class="subtitle">You can mix languages any time while talking to the app — this just sets the app's own voice.</p>
+
+    <button class="choice-card" id="langEnBtn" type="button">
+      <div class="choice-title">English</div>
+    </button>
+    <button class="choice-card" id="langSwBtn" type="button">
+      <div class="choice-title">Kiswahili</div>
+    </button>
+
+    <div class="spacer"></div>
+    <button class="primary-btn" id="languageNextBtn" type="button" disabled>Continue</button>
+  </div>
+
+  <!-- Step 3: Register familiar faces (list view) -->
+  <div class="step" id="step-faces">
+    <div class="progress-text">STEP 3 OF 6</div>
+    <h1>Register Familiar Faces</h1>
+    <p class="subtitle">Add people close to you now, for faster recognition later. Fully optional.</p>
+
+    <div class="face-list" id="faceList"></div>
+
+    <button class="choice-card" id="addPersonBtn" type="button">
+      <div class="choice-title">+ Add a person</div>
+    </button>
+
+    <div class="spacer"></div>
+    <button class="primary-btn" id="facesNextBtn" type="button">Continue</button>
+    <button class="text-link-btn" id="facesSkipBtn" type="button">Skip for now</button>
+  </div>
+
+  <!-- Step 3b: Add person sub-flow -->
+  <div class="step" id="step-add-face">
+    <div class="progress-text">ADD A PERSON</div>
+    <div class="video-frame">
+      <video id="faceVideo" autoplay playsinline muted></video>
+      <canvas id="faceCanvas"></canvas>
+    </div>
+    <div class="photo-strip" id="photoStrip"></div>
+    <button class="primary-btn" id="capturePhotoBtn" type="button">Capture Photo</button>
+
+    <div style="margin-top:20px;">
+      <label for="personNameInput">Name</label>
+      <input type="text" id="personNameInput" placeholder="e.g. Mum" />
+
+      <label>Relationship</label>
+      <div class="relationship-row" id="relationshipRow">
+        <button class="relationship-btn" data-rel="Friend" type="button">Friend</button>
+        <button class="relationship-btn" data-rel="Family" type="button">Family</button>
+        <button class="relationship-btn" data-rel="Coworker" type="button">Coworker</button>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <button class="primary-btn" id="savePersonBtn" type="button" disabled>Save Person</button>
+    <button class="text-link-btn" id="cancelAddPersonBtn" type="button">Cancel</button>
+  </div>
+
+  <!-- Step 4: Bluetooth pairing -->
+  <div class="step" id="step-bluetooth">
+    <div class="progress-text">STEP 4 OF 6</div>
+    <h1>Connect a Bluetooth Device</h1>
+    <p class="subtitle">Pair an earpiece so responses speak privately in your ear.</p>
+
+    <div class="bt-card">
+      <div class="bt-icon" id="btIcon">🎧</div>
+      <div class="bt-status-text" id="btStatusText">Not connected</div>
+    </div>
+
+    <button class="primary-btn" id="pairDeviceBtn" type="button">Pair a Device</button>
+
+    <div class="spacer"></div>
+    <button class="primary-btn" id="bluetoothNextBtn" type="button">Continue</button>
+    <button class="text-link-btn" id="bluetoothSkipBtn" type="button">Skip for now</button>
+  </div>
+
+  <!-- Step 5: Personalization -->
+  <div class="step" id="step-personalize">
+    <div class="progress-text">STEP 5 OF 6</div>
+    <h1>Personalize Your Experience</h1>
+
+    <div class="field-card">
+      <label for="voiceSelect">AI Voice</label>
+      <select id="voiceSelect"></select>
+      <button class="test-voice-btn" id="testVoiceBtn" type="button">Test this voice</button>
+    </div>
+
+    <div class="field-card">
+      <label for="speedRange">Speech Speed</label>
+      <input type="range" id="speedRange" min="0.6" max="1.6" step="0.1" value="1" />
+      <div class="range-labels"><span>Slow</span><span>Normal</span><span>Fast</span></div>
+    </div>
+
+    <div class="field-card">
+      <label>Notification Frequency</label>
+      <div class="segmented" id="notifSegmented">
+        <button data-value="off" type="button">Off</button>
+        <button data-value="normal" type="button">Normal</button>
+        <button data-value="frequent" type="button">Frequent</button>
+      </div>
+    </div>
+
+    <div class="field-card">
+      <label>Preferred Language</label>
+      <div class="segmented" id="langSegmented">
+        <button data-value="en" type="button">English</button>
+        <button data-value="sw" type="button">Kiswahili</button>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+    <button class="primary-btn" id="personalizeNextBtn" type="button">Continue</button>
+  </div>
+
+  <!-- Step 6: Voice tutorial -->
+  <div class="step" id="step-tutorial">
+    <div class="progress-text">STEP 6 OF 6</div>
+    <h1>Voice Commands</h1>
+    <p class="subtitle">Double-tap anywhere to talk. Here's what you can say:</p>
+
+    <div class="command-row"><div class="phrase">"Describe what's around me"</div><div class="desc">Get a fresh description of your surroundings</div></div>
+    <div class="command-row"><div class="phrase">"Read this"</div><div class="desc">Reads any visible text out loud — signs, labels, documents</div></div>
+    <div class="command-row"><div class="phrase">"Navigate to [place]"</div><div class="desc">Get real walking directions, spoken step by step</div></div>
+    <div class="command-row"><div class="phrase">"Emergency" or "Help me"</div><div class="desc">Sends an SOS to your emergency contact</div></div>
+    <div class="command-row"><div class="phrase">"Did they confirm?"</div><div class="desc">Check if your emergency contact responded</div></div>
+    <div class="command-row upcoming"><div class="phrase">"Who's here?"</div><div class="desc">Recognize registered familiar faces in frame</div></div>
+
+    <div class="spacer"></div>
+    <button class="primary-btn" id="finishBtn" type="button">Finish Setup</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const appEl = document.getElementById('app');
+  const toastEl = document.getElementById('toast');
+
+  // ---------- Shared state, written to localStorage on finish ----------
+  const state = {
+    profileType: null,       // 'visual' | 'hearing'
+    language: null,          // 'en' | 'sw'
+    familiarFaces: [],       // [{ name, relationship, photos: [base64,...] }]
+    bluetoothConnected: false,
+    bluetoothDeviceName: null,
+    voicePrefs: { voiceName: '', rate: 1 },
+    notificationFrequency: 'normal'
+  };
+
+  function showToast(text, ms = 2600) {
+    toastEl.textContent = text;
+    toastEl.classList.add('visible');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toastEl.classList.remove('visible'), ms);
+  }
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = state.voicePrefs.rate || 1;
+    window.speechSynthesis.speak(utter);
+  }
+
+  const steps = ['welcome', 'profile', 'language', 'faces', 'add-face', 'bluetooth', 'personalize', 'tutorial'];
+  function goToStep(id) {
+    steps.forEach(s => document.getElementById('step-' + s).classList.toggle('active', s === id));
+  }
+
+  // ---------- Step 0: Welcome ----------
+  document.getElementById('welcomeNextBtn').addEventListener('click', () => goToStep('profile'));
+
+  // ---------- Step 1: Profile type ----------
+  const profileVisualBtn = document.getElementById('profileVisualBtn');
+  const profileHearingBtn = document.getElementById('profileHearingBtn');
+  const profileNextBtn = document.getElementById('profileNextBtn');
+
+  profileVisualBtn.addEventListener('click', () => {
+    state.profileType = 'visual';
+    profileVisualBtn.classList.add('selected');
+    profileHearingBtn.classList.remove('selected');
+    profileNextBtn.disabled = false;
+  });
+  profileHearingBtn.addEventListener('click', () => {
+    showToast("Coming soon! This experience isn't built yet — stay tuned.");
+  });
+  profileNextBtn.addEventListener('click', () => goToStep('language'));
+
+  // ---------- Step 2: Language ----------
+  const langEnBtn = document.getElementById('langEnBtn');
+  const langSwBtn = document.getElementById('langSwBtn');
+  const languageNextBtn = document.getElementById('languageNextBtn');
+
+  function selectLanguage(lang) {
+    state.language = lang;
+    langEnBtn.classList.toggle('selected', lang === 'en');
+    langSwBtn.classList.toggle('selected', lang === 'sw');
+    languageNextBtn.disabled = false;
+    // Keep the personalization screen's language toggle in sync later.
+    document.querySelectorAll('#langSegmented button').forEach(b => {
+      b.classList.toggle('selected', b.dataset.value === lang);
+    });
+  }
+  langEnBtn.addEventListener('click', () => selectLanguage('en'));
+  langSwBtn.addEventListener('click', () => selectLanguage('sw'));
+  languageNextBtn.addEventListener('click', () => goToStep('faces'));
+
+  // ---------- Step 3: Register familiar faces ----------
+  const faceListEl = document.getElementById('faceList');
+  const addPersonBtn = document.getElementById('addPersonBtn');
+  const facesNextBtn = document.getElementById('facesNextBtn');
+  const facesSkipBtn = document.getElementById('facesSkipBtn');
+
+  function renderFaceList() {
+    faceListEl.innerHTML = '';
+    state.familiarFaces.forEach(person => {
+      const row = document.createElement('div');
+      row.className = 'face-row';
+      const thumb = person.photos && person.photos[0]
+        ? `<img class="face-thumb" src="${person.photos[0]}" alt="" />`
+        : `<div class="face-thumb"></div>`;
+      row.innerHTML = `${thumb}<div class="face-info"><div class="face-name">${person.name}</div><div class="face-rel">${person.relationship}</div></div>`;
+      faceListEl.appendChild(row);
+    });
+  }
+
+  addPersonBtn.addEventListener('click', () => {
+    goToStep('add-face');
+    startFaceCamera();
+  });
+  facesNextBtn.addEventListener('click', () => goToStep('bluetooth'));
+  facesSkipBtn.addEventListener('click', () => goToStep('bluetooth'));
+
+  // ---------- Step 3b: Add person sub-flow ----------
+  const faceVideo = document.getElementById('faceVideo');
+  const faceCanvas = document.getElementById('faceCanvas');
+  const photoStripEl = document.getElementById('photoStrip');
+  const capturePhotoBtn = document.getElementById('capturePhotoBtn');
+  const personNameInput = document.getElementById('personNameInput');
+  const relationshipRow = document.getElementById('relationshipRow');
+  const savePersonBtn = document.getElementById('savePersonBtn');
+  const cancelAddPersonBtn = document.getElementById('cancelAddPersonBtn');
+
+  const MAX_PHOTOS = 3;
+  let faceStream = null;
+  let capturedPhotos = [];
+  let selectedRelationship = null;
+
+  async function startFaceCamera() {
+    try {
+      faceStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      faceVideo.srcObject = faceStream;
+      await faceVideo.play();
+    } catch (e) {
+      showToast('Could not access the camera. Check permissions.');
+    }
+  }
+  function stopFaceCamera() {
+    if (faceStream) { faceStream.getTracks().forEach(t => t.stop()); faceStream = null; }
+  }
+
+  function resetAddPersonForm() {
+    capturedPhotos = [];
+    selectedRelationship = null;
+    photoStripEl.innerHTML = '';
+    personNameInput.value = '';
+    relationshipRow.querySelectorAll('.relationship-btn').forEach(b => b.classList.remove('selected'));
+    updateSaveEnabled();
+  }
+
+  function updateSaveEnabled() {
+    savePersonBtn.disabled = !(capturedPhotos.length > 0 && personNameInput.value.trim() && selectedRelationship);
+  }
+
+  capturePhotoBtn.addEventListener('click', () => {
+    if (capturedPhotos.length >= MAX_PHOTOS) {
+      showToast(`You've captured ${MAX_PHOTOS} photos — that's plenty.`);
+      return;
+    }
+    const w = faceVideo.videoWidth, h = faceVideo.videoHeight;
+    if (!w || !h) return;
+    faceCanvas.width = w; faceCanvas.height = h;
+    faceCanvas.getContext('2d').drawImage(faceVideo, 0, 0, w, h);
+    const dataUrl = faceCanvas.toDataURL('image/jpeg', 0.8);
+    capturedPhotos.push(dataUrl);
+
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    photoStripEl.appendChild(img);
+    updateSaveEnabled();
+  });
+
+  personNameInput.addEventListener('input', updateSaveEnabled);
+  relationshipRow.querySelectorAll('.relationship-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      selectedRelationship = btn.dataset.rel;
+      relationshipRow.querySelectorAll('.relationship-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      updateSaveEnabled();
+    });
+  });
+
+  savePersonBtn.addEventListener('click', () => {
+    state.familiarFaces.push({
+      name: personNameInput.value.trim(),
+      relationship: selectedRelationship,
+      photos: capturedPhotos
+    });
+    stopFaceCamera();
+    renderFaceList();
+    resetAddPersonForm();
+    goToStep('faces');
+  });
+
+  cancelAddPersonBtn.addEventListener('click', () => {
+    stopFaceCamera();
+    resetAddPersonForm();
+    goToStep('faces');
+  });
+
+  // ---------- Step 4: Bluetooth pairing (scripted, not a real handshake) ----------
+  const btIcon = document.getElementById('btIcon');
+  const btStatusText = document.getElementById('btStatusText');
+  const pairDeviceBtn = document.getElementById('pairDeviceBtn');
+  const bluetoothNextBtn = document.getElementById('bluetoothNextBtn');
+  const bluetoothSkipBtn = document.getElementById('bluetoothSkipBtn');
+
+  const MOCK_DEVICE_NAME = 'AuraSense EarBuds';
+
+  function runBluetoothMock() {
+    pairDeviceBtn.disabled = true;
+    btStatusText.textContent = 'Scanning for nearby devices…';
+
+    setTimeout(() => {
+      btStatusText.textContent = `Found: ${MOCK_DEVICE_NAME}`;
+    }, 1400);
+
+    setTimeout(() => {
+      btIcon.textContent = '✅';
+      btStatusText.textContent = `Connected to ${MOCK_DEVICE_NAME}`;
+      state.bluetoothConnected = true;
+      state.bluetoothDeviceName = MOCK_DEVICE_NAME;
+      pairDeviceBtn.disabled = false;
+      pairDeviceBtn.textContent = 'Pair a Different Device';
+    }, 2800);
+  }
+
+  pairDeviceBtn.addEventListener('click', runBluetoothMock);
+  bluetoothNextBtn.addEventListener('click', () => goToStep('personalize'));
+  bluetoothSkipBtn.addEventListener('click', () => goToStep('personalize'));
+
+  // ---------- Step 5: Personalization ----------
+  const voiceSelect = document.getElementById('voiceSelect');
+  const testVoiceBtn = document.getElementById('testVoiceBtn');
+  const speedRange = document.getElementById('speedRange');
+  const notifSegmented = document.getElementById('notifSegmented');
+  const langSegmented = document.getElementById('langSegmented');
+  const personalizeNextBtn = document.getElementById('personalizeNextBtn');
+
+  function loadVoiceOptions() {
+    const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    if (!voices.length) return;
+    voiceSelect.innerHTML = '';
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+    });
+    state.voicePrefs.voiceName = voices[0].name;
+  }
+  if ('speechSynthesis' in window) {
+    loadVoiceOptions();
+    window.speechSynthesis.onvoiceschanged = loadVoiceOptions;
+  }
+  voiceSelect.addEventListener('change', () => { state.voicePrefs.voiceName = voiceSelect.value; });
+
+  testVoiceBtn.addEventListener('click', () => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance("Hi, this is how I'll sound when I talk to you.");
+    const voices = window.speechSynthesis.getVoices();
+    const chosen = voices.find(v => v.name === state.voicePrefs.voiceName);
+    if (chosen) utter.voice = chosen;
+    utter.rate = state.voicePrefs.rate;
+    window.speechSynthesis.speak(utter);
+  });
+
+  speedRange.addEventListener('input', () => {
+    state.voicePrefs.rate = parseFloat(speedRange.value);
+  });
+
+  notifSegmented.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.notificationFrequency = btn.dataset.value;
+      notifSegmented.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+  // Default-select "normal" to match state's initial value.
+  notifSegmented.querySelector('[data-value="normal"]').classList.add('selected');
+
+  langSegmented.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => selectLanguage(btn.dataset.value));
+  });
+
+  personalizeNextBtn.addEventListener('click', () => goToStep('tutorial'));
+
+  // ---------- Step 6: Finish ----------
+  document.getElementById('finishBtn').addEventListener('click', () => {
+    localStorage.setItem('onboardingComplete', 'true');
+    localStorage.setItem('userProfile', JSON.stringify({ type: state.profileType || 'visual' }));
+    localStorage.setItem('preferredLanguage', state.language || 'en');
+    localStorage.setItem('familiarFaces', JSON.stringify(state.familiarFaces));
+    localStorage.setItem('bluetoothDevice', JSON.stringify({
+      connected: state.bluetoothConnected,
+      name: state.bluetoothDeviceName
+    }));
+    localStorage.setItem('voicePrefs', JSON.stringify(state.voicePrefs));
+    localStorage.setItem('notificationFrequency', state.notificationFrequency);
+
+    window.location.href = '/index.html';
+  });
+
+  renderFaceList();
+</script>
+</body>
+</html>

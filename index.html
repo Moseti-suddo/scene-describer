@@ -469,6 +469,29 @@
   const navStepTextEl = document.getElementById('navStepText');
   const nextStepBtn = document.getElementById('nextStepBtn');
 
+  // ---------- Onboarding gate ----------
+  // First-time users are sent through onboarding.html before ever reaching
+  // the main app. Anyone who already has onboardingComplete just proceeds
+  // straight through as normal.
+  if (!localStorage.getItem('onboardingComplete')) {
+    window.location.href = '/onboarding.html';
+  }
+
+  // ---------- Personalization (set during onboarding, editable later) ----------
+  let voicePrefs = { voiceName: '', rate: 1 };
+  try {
+    voicePrefs = Object.assign(voicePrefs, JSON.parse(localStorage.getItem('voicePrefs') || '{}'));
+  } catch (e) {}
+
+  let cachedSelectedVoice = null;
+  function getSelectedSpeechVoice() {
+    if (!('speechSynthesis' in window) || !voicePrefs.voiceName) return null;
+    if (cachedSelectedVoice && cachedSelectedVoice.name === voicePrefs.voiceName) return cachedSelectedVoice;
+    const match = window.speechSynthesis.getVoices().find(v => v.name === voicePrefs.voiceName);
+    cachedSelectedVoice = match || null;
+    return cachedSelectedVoice;
+  }
+
   let currentStream = null;
   let facingMode = 'environment';
   let hasAnnouncedInstructions = false;
@@ -564,7 +587,9 @@
     if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 1;
+    const chosenVoice = getSelectedSpeechVoice();
+    if (chosenVoice) utter.voice = chosenVoice;
+    utter.rate = voicePrefs.rate || 1;
     utter.pitch = 1;
     setState('speaking');
 
