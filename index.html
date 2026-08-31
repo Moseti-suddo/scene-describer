@@ -354,6 +354,74 @@
     margin-top: 18px;
     line-height: 1.5;
   }
+
+  /* ---------- Devices screen ---------- */
+  .device-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 18px;
+    margin-top: 8px;
+    margin-bottom: 14px;
+  }
+  .device-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .device-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .device-status-pill {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #222;
+    color: #999;
+    white-space: nowrap;
+  }
+  .device-status-pill.scanning { background: #3a2f00; color: #FFD400; }
+  .device-status-pill.found { background: #3a2f00; color: #FFD400; }
+  .device-status-pill.connected { background: #062b16; color: #4ADE80; }
+  .device-found-name {
+    font-size: 14px;
+    color: #ccc;
+    margin: 6px 0 12px;
+    min-height: 18px;
+  }
+  .device-action-btn {
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    background: #FFD400;
+    color: #000;
+    border: none;
+    border-radius: 10px;
+  }
+  .device-action-btn.disconnect {
+    background: transparent;
+    color: #FF6B6B;
+    border: 2px solid #FF6B6B;
+  }
+  .device-action-btn:disabled { opacity: 0.6; }
+  .device-action-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+  .devices-honesty-note {
+    color: #999;
+    font-size: 14px;
+    margin-top: 12px;
+    line-height: 1.5;
+    padding: 12px 14px;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 10px;
+  }
 </style>
 </head>
 <body>
@@ -431,12 +499,48 @@
     </div>
   </div>
 
+  <div class="view" id="devicesView">
+    <h1>Devices</h1>
+
+    <div class="device-card" id="deviceCard-glasses">
+      <div class="device-card-top">
+        <div class="device-name">Smart Glasses</div>
+        <div class="device-status-pill" id="deviceStatusPill-glasses">Not connected</div>
+      </div>
+      <div class="device-found-name" id="deviceFoundName-glasses"></div>
+      <button class="device-action-btn" id="deviceActionBtn-glasses" type="button">Connect</button>
+    </div>
+
+    <div class="device-card" id="deviceCard-cane">
+      <div class="device-card-top">
+        <div class="device-name">Smart Cane</div>
+        <div class="device-status-pill" id="deviceStatusPill-cane">Not connected</div>
+      </div>
+      <div class="device-found-name" id="deviceFoundName-cane"></div>
+      <button class="device-action-btn" id="deviceActionBtn-cane" type="button">Connect</button>
+    </div>
+
+    <div class="device-card" id="deviceCard-wrist">
+      <div class="device-card-top">
+        <div class="device-name">Wrist Band</div>
+        <div class="device-status-pill" id="deviceStatusPill-wrist">Not connected</div>
+      </div>
+      <div class="device-found-name" id="deviceFoundName-wrist"></div>
+      <button class="device-action-btn" id="deviceActionBtn-wrist" type="button">Connect</button>
+    </div>
+
+    <div class="devices-honesty-note">
+      This screen simulates pairing with Scene Describer hardware accessories. Compatible glasses, cane, and wrist band hardware don't exist yet, so no real Bluetooth connection is made here — this shows how device pairing and status will work once that hardware is built.
+    </div>
+  </div>
+
 </div>
 
 <nav class="navbar" id="navbar">
   <button class="nav-btn active" data-tab="home">Home</button>
   <button class="nav-btn" data-tab="sos">SOS</button>
   <button class="nav-btn" data-tab="places">Places</button>
+  <button class="nav-btn" data-tab="devices">Devices</button>
 </nav>
 
 <script>
@@ -468,6 +572,7 @@
   const navMetaEl = document.getElementById('navMeta');
   const navStepTextEl = document.getElementById('navStepText');
   const nextStepBtn = document.getElementById('nextStepBtn');
+  const devicesView = document.getElementById('devicesView');
 
   // ---------- Onboarding gate ----------
   // First-time users are sent through onboarding.html before ever reaching
@@ -538,6 +643,29 @@
   // standing in for what position-tracking would normally trigger.
   let activeRoute = null;
   let navigationInProgress = false; // mirrors contactSetupInProgress's guard pattern
+
+  // ---------- Devices state ----------
+  // Simulated Bluetooth pairing for future hardware accessories (glasses,
+  // cane, wrist band) — same honest pattern as onboarding's earbuds step:
+  // a scripted setTimeout chain, not a real Web Bluetooth handshake, since
+  // no compatible hardware exists yet. Stored separately from onboarding's
+  // single `bluetoothDevice` slot because this manages a different,
+  // independent set of accessories and supports more than one at a time.
+  const DEVICE_DEFS = {
+    glasses: { label: 'Smart Glasses', simulatedName: 'AuraSense Glasses' },
+    cane: { label: 'Smart Cane', simulatedName: 'AuraSense Cane' },
+    wrist: { label: 'Wrist Band', simulatedName: 'AuraSense Band' }
+  };
+
+  let pairedDevices = {};
+  try {
+    pairedDevices = JSON.parse(localStorage.getItem('pairedDevices') || '{}');
+  } catch (e) { pairedDevices = {}; }
+
+  // In-memory only: which device (if any) is currently mid-scan, so a
+  // second Connect tap while one is scanning is ignored rather than
+  // starting overlapping fake scans.
+  let deviceScanInProgress = {};
 
   const DESCRIBE_KEYWORDS = [
     'describe', 'what is around', "what's around", 'look around',
@@ -642,6 +770,7 @@
     homeView.classList.toggle('active', tab === 'home');
     sosView.classList.toggle('active', tab === 'sos');
     placesView.classList.toggle('active', tab === 'places');
+    devicesView.classList.toggle('active', tab === 'devices');
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     if (tab === 'sos') {
       renderSosScreen();
@@ -651,6 +780,9 @@
     }
     if (tab === 'places') {
       renderPlacesScreen();
+    }
+    if (tab === 'devices') {
+      renderDevicesScreen();
     }
   }
 
@@ -1227,6 +1359,97 @@
     localStorage.setItem('savedPlaces', JSON.stringify(savedPlaces));
   }
 
+  // ---------- Devices screen (simulated pairing) ----------
+  function renderDevicesScreen() {
+    Object.keys(DEVICE_DEFS).forEach(id => {
+      const pill = document.getElementById(`deviceStatusPill-${id}`);
+      const foundName = document.getElementById(`deviceFoundName-${id}`);
+      const btn = document.getElementById(`deviceActionBtn-${id}`);
+      const device = pairedDevices[id];
+
+      pill.classList.remove('scanning', 'found', 'connected');
+
+      if (deviceScanInProgress[id]) {
+        // Mid-scan render is handled by simulateConnect itself as it
+        // progresses through steps; renderDevicesScreen just leaves it be
+        // when called elsewhere (e.g. tab switch) mid-scan.
+        return;
+      }
+
+      if (device && device.connected) {
+        pill.textContent = 'Connected';
+        pill.classList.add('connected');
+        foundName.textContent = device.name;
+        btn.textContent = 'Disconnect';
+        btn.classList.add('disconnect');
+        btn.disabled = false;
+      } else {
+        pill.textContent = 'Not connected';
+        foundName.textContent = '';
+        btn.textContent = 'Connect';
+        btn.classList.remove('disconnect');
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function savePairedDevices() {
+    localStorage.setItem('pairedDevices', JSON.stringify(pairedDevices));
+  }
+
+  function simulateConnect(id) {
+    if (deviceScanInProgress[id]) return;
+    deviceScanInProgress[id] = true;
+
+    const def = DEVICE_DEFS[id];
+    const pill = document.getElementById(`deviceStatusPill-${id}`);
+    const foundName = document.getElementById(`deviceFoundName-${id}`);
+    const btn = document.getElementById(`deviceActionBtn-${id}`);
+
+    btn.disabled = true;
+    pill.classList.remove('found', 'connected');
+    pill.classList.add('scanning');
+    pill.textContent = 'Scanning…';
+    foundName.textContent = '';
+
+    setTimeout(() => {
+      pill.classList.remove('scanning');
+      pill.classList.add('found');
+      pill.textContent = 'Found';
+      foundName.textContent = `Found "${def.simulatedName}"`;
+
+      setTimeout(() => {
+        pairedDevices[id] = {
+          name: def.simulatedName,
+          connected: true,
+          connectedAt: Date.now()
+        };
+        savePairedDevices();
+        deviceScanInProgress[id] = false;
+        renderDevicesScreen();
+      }, 1200);
+    }, 1400);
+  }
+
+  function disconnectDevice(id) {
+    delete pairedDevices[id];
+    savePairedDevices();
+    renderDevicesScreen();
+  }
+
+  Object.keys(DEVICE_DEFS).forEach(id => {
+    const btn = document.getElementById(`deviceActionBtn-${id}`);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const device = pairedDevices[id];
+      if (device && device.connected) {
+        disconnectDevice(id);
+      } else {
+        simulateConnect(id);
+      }
+    });
+  });
+
   // ---------- Navigation flow ----------
   // beginRoute does the real work: reads current position once, calls
   // /api/navigate for a real geocoded destination + real walking directions,
@@ -1511,6 +1734,7 @@
 
   renderSosScreen();
   renderPlacesScreen();
+  renderDevicesScreen();
   startCamera();
 </script>
 </body>
