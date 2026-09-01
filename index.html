@@ -422,6 +422,45 @@
     border: 1px solid #333;
     border-radius: 10px;
   }
+
+  /* ---------- Settings screen ---------- */
+  .settings-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 8px;
+    margin-bottom: 16px;
+    text-align: left;
+  }
+  .settings-card h2 {
+    margin: 0 0 12px;
+    font-size: 17px;
+    color: #fff;
+  }
+  .mode-btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .mode-btn {
+    position: relative;
+    z-index: 5;
+    flex: 1;
+    padding: 12px 6px;
+    font-size: 14px;
+    font-weight: 700;
+    background: #000;
+    color: #fff;
+    border: 2px solid #444;
+    border-radius: 10px;
+  }
+  .mode-btn.active {
+    background: #FFD400;
+    color: #000;
+    border-color: #FFD400;
+  }
+  .mode-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -534,6 +573,44 @@
     </div>
   </div>
 
+  <div class="view" id="settingsView">
+    <h1>Settings</h1>
+
+    <div class="settings-card">
+      <h2>Assistance mode</h2>
+      <div class="contact-status" id="settingsModeStatus" style="margin-bottom:12px;">Current: Guided</div>
+      <div class="mode-btn-row">
+        <button class="mode-btn" id="settingsModeBtn-independent" data-mode="independent" type="button">Independent</button>
+        <button class="mode-btn" id="settingsModeBtn-guided" data-mode="guided" type="button">Guided</button>
+        <button class="mode-btn" id="settingsModeBtn-support" data-mode="support" type="button">Support</button>
+      </div>
+      <p class="sos-help-text" id="settingsModeDescription" style="margin-top:10px;"></p>
+      <p class="sos-help-text">
+        You can also switch anytime by saying "independent mode", "guided mode", or "support mode" from any screen.
+      </p>
+    </div>
+
+    <div class="settings-card">
+      <h2>Emergency contact</h2>
+      <div class="contact-status" id="settingsContactStatus">No emergency contact set yet.</div>
+      <div class="manual-contact-row">
+        <input type="tel" id="settingsContactInput" placeholder="Contact's phone number" inputmode="numeric" />
+        <button class="secondary-link-btn" id="settingsContactSaveBtn" type="button" style="margin-top:0;">Save</button>
+      </div>
+      <p class="sos-help-text">
+        Saving sends them a text message with a link to confirm setup on their own phone.
+      </p>
+    </div>
+
+    <div class="settings-card" style="text-align:center;">
+      <h2 style="text-align:left;">Send SOS now</h2>
+      <button class="big-btn" id="settingsSosBtn" type="button">Send SOS Now</button>
+      <p class="sos-help-text">
+        Requires a saved contact above. Attempts to attach your location, then opens a text message pre-filled with an emergency alert for you to send.
+      </p>
+    </div>
+  </div>
+
 </div>
 
 <nav class="navbar" id="navbar">
@@ -541,6 +618,7 @@
   <button class="nav-btn" data-tab="sos">SOS</button>
   <button class="nav-btn" data-tab="places">Places</button>
   <button class="nav-btn" data-tab="devices">Devices</button>
+  <button class="nav-btn" data-tab="settings">Settings</button>
 </nav>
 
 <script>
@@ -573,6 +651,13 @@
   const navStepTextEl = document.getElementById('navStepText');
   const nextStepBtn = document.getElementById('nextStepBtn');
   const devicesView = document.getElementById('devicesView');
+  const settingsView = document.getElementById('settingsView');
+  const settingsModeStatusEl = document.getElementById('settingsModeStatus');
+  const settingsModeDescriptionEl = document.getElementById('settingsModeDescription');
+  const settingsContactStatusEl = document.getElementById('settingsContactStatus');
+  const settingsContactInput = document.getElementById('settingsContactInput');
+  const settingsContactSaveBtn = document.getElementById('settingsContactSaveBtn');
+  const settingsSosBtn = document.getElementById('settingsSosBtn');
 
   // ---------- Onboarding gate ----------
   // First-time users are sent through onboarding.html before ever reaching
@@ -688,6 +773,24 @@
     { keywords: ['support mode', 'slow down', 'slower please', "i'm overwhelmed", 'im overwhelmed'], mode: 'support', label: 'Support' }
   ];
 
+  // Label + description for rendering the Settings tab's mode picker.
+  // Same three modes as MODE_COMMANDS above; kept separate since this data
+  // is for display, not voice matching.
+  const MODE_INFO = {
+    independent: {
+      label: 'Independent',
+      desc: 'Minimal spoken output — only what\u2019s actionable or a hazard. Best when you want to move fast and rely on your own judgment for the rest.'
+    },
+    guided: {
+      label: 'Guided',
+      desc: 'Full descriptions and step-by-step directions, offered rather than forced. The default, balanced mode.'
+    },
+    support: {
+      label: 'Support',
+      desc: 'Slower pace, more context, and check-ins along the way. Good for unfamiliar places or days you want extra reassurance.'
+    }
+  };
+
   const DESCRIBE_KEYWORDS = [
     'describe', 'what is around', "what's around", 'look around',
     'new picture', 'take a picture', 'whats here', "what's here",
@@ -792,6 +895,7 @@
     sosView.classList.toggle('active', tab === 'sos');
     placesView.classList.toggle('active', tab === 'places');
     devicesView.classList.toggle('active', tab === 'devices');
+    settingsView.classList.toggle('active', tab === 'settings');
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     if (tab === 'sos') {
       renderSosScreen();
@@ -804,6 +908,9 @@
     }
     if (tab === 'devices') {
       renderDevicesScreen();
+    }
+    if (tab === 'settings') {
+      renderSettingsScreen();
     }
   }
 
@@ -824,6 +931,60 @@
       : 'invited, waiting for them to confirm';
     contactStatusEl.textContent = `Emergency contact: ${spacedDigits(emergencyContact.phone)} (${confirmLabel})`;
   }
+
+  // ---------- Settings screen ----------
+  // Absorbs everything settings.html offers (assistance mode, emergency
+  // contact, Send SOS) into an in-app tab. settings.html itself is left in
+  // place as a standalone, JS-independent fallback URL — this tab is the
+  // normal way to reach the same controls from within the app.
+  function renderSettingsScreen() {
+    ASSISTANCE_MODES.forEach(m => {
+      document.getElementById(`settingsModeBtn-${m}`).classList.toggle('active', m === assistanceMode);
+    });
+    settingsModeStatusEl.textContent = `Current: ${MODE_INFO[assistanceMode].label}`;
+    settingsModeDescriptionEl.textContent = MODE_INFO[assistanceMode].desc;
+
+    if (!emergencyContact) {
+      settingsContactStatusEl.textContent = 'No emergency contact set yet.';
+      return;
+    }
+    const confirmLabel = emergencyContact.confirmed
+      ? 'confirmed and ready'
+      : 'invited, waiting for them to confirm';
+    settingsContactStatusEl.textContent = `Emergency contact: ${spacedDigits(emergencyContact.phone)} (${confirmLabel})`;
+  }
+
+  ASSISTANCE_MODES.forEach(m => {
+    document.getElementById(`settingsModeBtn-${m}`).addEventListener('click', (e) => {
+      e.stopPropagation();
+      setAssistanceMode(m);
+      renderSettingsScreen();
+    });
+  });
+
+  settingsContactSaveBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setError('');
+    const digits = (settingsContactInput.value || '').replace(/\D/g, '');
+    if (!digits || digits.length < 7) {
+      setError('Enter a valid phone number (7+ digits).');
+      return;
+    }
+    Promise.resolve(saveEmergencyContact(digits)).then(() => {
+      renderSettingsScreen();
+    }).catch((err) => {
+      setError('Saving contact failed: ' + (err && err.message ? err.message : err));
+    });
+  });
+
+  settingsSosBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setError('');
+    const action = !emergencyContact ? startContactSetup() : triggerSOS();
+    Promise.resolve(action).catch((err) => {
+      setError('SOS action failed: ' + (err && err.message ? err.message : err));
+    });
+  });
 
   sendSosBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1798,6 +1959,7 @@
   renderSosScreen();
   renderPlacesScreen();
   renderDevicesScreen();
+  renderSettingsScreen();
   startCamera();
 </script>
 </body>
