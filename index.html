@@ -461,6 +461,65 @@
     border-color: #FFD400;
   }
   .mode-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+
+  .field-card {
+    background: #000;
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+  .field-card label {
+    display: block;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  .field-card select {
+    width: 100%;
+    padding: 10px;
+    font-size: 14px;
+    background: #111;
+    color: #fff;
+    border: 2px solid #444;
+    border-radius: 8px;
+  }
+  .field-card input[type="range"] { width: 100%; margin: 8px 0; }
+  .range-labels { display: flex; justify-content: space-between; font-size: 12px; color: #888; }
+  .segmented { display: flex; gap: 8px; margin-top: 4px; }
+  .segmented button {
+    position: relative;
+    z-index: 5;
+    flex: 1;
+    padding: 10px 6px;
+    font-size: 13px;
+    font-weight: 700;
+    background: #111;
+    color: #ccc;
+    border: 2px solid #333;
+    border-radius: 8px;
+  }
+  .segmented button.selected {
+    border-color: #FFD400;
+    color: #FFD400;
+    background: #1a1600;
+  }
+  .segmented button:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+  .test-voice-btn {
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    background: transparent;
+    color: #FFD400;
+    border: 2px solid #FFD400;
+    border-radius: 8px;
+    margin-top: 8px;
+  }
+  .test-voice-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -591,6 +650,39 @@
     </div>
 
     <div class="settings-card">
+      <h2>Personalization</h2>
+
+      <div class="field-card">
+        <label for="settingsVoiceSelect">AI Voice</label>
+        <select id="settingsVoiceSelect"></select>
+        <button class="test-voice-btn" id="settingsTestVoiceBtn" type="button">Test this voice</button>
+      </div>
+
+      <div class="field-card">
+        <label for="settingsSpeedRange">Speech Speed</label>
+        <input type="range" id="settingsSpeedRange" min="0.6" max="1.6" step="0.1" value="1" />
+        <div class="range-labels"><span>Slow</span><span>Normal</span><span>Fast</span></div>
+      </div>
+
+      <div class="field-card">
+        <label>Notification Frequency</label>
+        <div class="segmented" id="settingsNotifSegmented">
+          <button data-value="off" type="button">Off</button>
+          <button data-value="normal" type="button">Normal</button>
+          <button data-value="frequent" type="button">Frequent</button>
+        </div>
+      </div>
+
+      <div class="field-card" style="margin-bottom:0;">
+        <label>Preferred Language</label>
+        <div class="segmented" id="settingsLangSegmented">
+          <button data-value="en" type="button">English</button>
+          <button data-value="sw" type="button">Kiswahili</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
       <h2>Emergency contact</h2>
       <div class="contact-status" id="settingsContactStatus">No emergency contact set yet.</div>
       <div class="manual-contact-row">
@@ -658,6 +750,11 @@
   const settingsContactInput = document.getElementById('settingsContactInput');
   const settingsContactSaveBtn = document.getElementById('settingsContactSaveBtn');
   const settingsSosBtn = document.getElementById('settingsSosBtn');
+  const settingsVoiceSelect = document.getElementById('settingsVoiceSelect');
+  const settingsTestVoiceBtn = document.getElementById('settingsTestVoiceBtn');
+  const settingsSpeedRange = document.getElementById('settingsSpeedRange');
+  const settingsNotifSegmented = document.getElementById('settingsNotifSegmented');
+  const settingsLangSegmented = document.getElementById('settingsLangSegmented');
 
   // ---------- Onboarding gate ----------
   // First-time users are sent through onboarding.html before ever reaching
@@ -681,6 +778,14 @@
     cachedSelectedVoice = match || null;
     return cachedSelectedVoice;
   }
+
+  // Other onboarding personalization prefs, now editable after the fact
+  // from the Settings tab rather than being locked in at first setup.
+  let notificationFrequency = localStorage.getItem('notificationFrequency') || 'normal';
+  if (!['off', 'normal', 'frequent'].includes(notificationFrequency)) notificationFrequency = 'normal';
+
+  let preferredLanguage = localStorage.getItem('preferredLanguage') || 'en';
+  if (!['en', 'sw'].includes(preferredLanguage)) preferredLanguage = 'en';
 
   let currentStream = null;
   let facingMode = 'environment';
@@ -944,6 +1049,20 @@
     settingsModeStatusEl.textContent = `Current: ${MODE_INFO[assistanceMode].label}`;
     settingsModeDescriptionEl.textContent = MODE_INFO[assistanceMode].desc;
 
+    // Personalization controls. loadSettingsVoiceOptions() is called here
+    // too (not just once at startup) because speechSynthesis.getVoices()
+    // is known to come back empty or late on some Android/Chrome
+    // combinations — re-checking whenever the tab is opened is a cheap
+    // guard against landing on an empty dropdown.
+    loadSettingsVoiceOptions();
+    settingsSpeedRange.value = voicePrefs.rate || 1;
+    settingsNotifSegmented.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('selected', b.dataset.value === notificationFrequency);
+    });
+    settingsLangSegmented.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('selected', b.dataset.value === preferredLanguage);
+    });
+
     if (!emergencyContact) {
       settingsContactStatusEl.textContent = 'No emergency contact set yet.';
       return;
@@ -953,6 +1072,76 @@
       : 'invited, waiting for them to confirm';
     settingsContactStatusEl.textContent = `Emergency contact: ${spacedDigits(emergencyContact.phone)} (${confirmLabel})`;
   }
+
+  // ---------- Personalization: voice, speed, notifications, language ----------
+  function loadSettingsVoiceOptions() {
+    if (!('speechSynthesis' in window)) return;
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return;
+
+    settingsVoiceSelect.innerHTML = '';
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})`;
+      settingsVoiceSelect.appendChild(opt);
+    });
+
+    // Keep whatever voice was chosen at onboarding (or last time here) if
+    // it's still available; only fall back to the first voice in the list
+    // when there's truly nothing saved yet — never silently overwrite an
+    // existing preference just because this function re-ran.
+    const match = voices.find(v => v.name === voicePrefs.voiceName);
+    settingsVoiceSelect.value = match ? match.name : voices[0].name;
+  }
+
+  if ('speechSynthesis' in window) {
+    loadSettingsVoiceOptions();
+    window.speechSynthesis.onvoiceschanged = loadSettingsVoiceOptions;
+  }
+
+  settingsVoiceSelect.addEventListener('change', (e) => {
+    e.stopPropagation();
+    voicePrefs.voiceName = settingsVoiceSelect.value;
+    localStorage.setItem('voicePrefs', JSON.stringify(voicePrefs));
+    cachedSelectedVoice = null; // force re-resolution against the new name
+  });
+
+  settingsTestVoiceBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance("Hi, this is how I'll sound when I talk to you.");
+    const voices = window.speechSynthesis.getVoices();
+    const chosen = voices.find(v => v.name === settingsVoiceSelect.value);
+    if (chosen) utter.voice = chosen;
+    utter.rate = voicePrefs.rate || 1;
+    window.speechSynthesis.speak(utter);
+  });
+
+  settingsSpeedRange.addEventListener('input', (e) => {
+    e.stopPropagation();
+    voicePrefs.rate = parseFloat(settingsSpeedRange.value);
+    localStorage.setItem('voicePrefs', JSON.stringify(voicePrefs));
+  });
+
+  settingsNotifSegmented.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notificationFrequency = btn.dataset.value;
+      localStorage.setItem('notificationFrequency', notificationFrequency);
+      renderSettingsScreen();
+    });
+  });
+
+  settingsLangSegmented.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      preferredLanguage = btn.dataset.value;
+      localStorage.setItem('preferredLanguage', preferredLanguage);
+      renderSettingsScreen();
+    });
+  });
 
   ASSISTANCE_MODES.forEach(m => {
     document.getElementById(`settingsModeBtn-${m}`).addEventListener('click', (e) => {
