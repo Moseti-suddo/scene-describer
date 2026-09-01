@@ -126,6 +126,27 @@
     margin-top: 10px;
     line-height: 1.4;
   }
+  .mode-btn-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 12px 6px;
+    font-size: 14px;
+    font-weight: 700;
+    background: #000;
+    color: #fff;
+    border: 2px solid #444;
+    border-radius: 10px;
+  }
+  .mode-btn.active {
+    background: #FFD400;
+    color: #000;
+    border-color: #FFD400;
+  }
+  .mode-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -139,6 +160,24 @@
 
   <div class="banner error" id="errorBanner" role="alert"></div>
   <div class="banner success" id="successBanner" role="status"></div>
+
+  <div class="card">
+    <h2>Assistance mode</h2>
+    <div class="status-line">
+      Current: <span class="status-value" id="modeStatus">Guided</span>
+    </div>
+    <div class="mode-btn-row" style="margin-top:12px;">
+      <button class="mode-btn" id="modeBtn-independent" data-mode="independent" type="button">Independent</button>
+      <button class="mode-btn" id="modeBtn-guided" data-mode="guided" type="button">Guided</button>
+      <button class="mode-btn" id="modeBtn-support" data-mode="support" type="button">Support</button>
+    </div>
+    <p class="helper-text" id="modeDescription"></p>
+    <p class="helper-text">
+      This changes how much detail and pacing you get from scene descriptions and
+      navigation — not what the app can do. You can also switch by saying
+      "independent mode", "guided mode", or "support mode" anywhere in the app.
+    </p>
+  </div>
 
   <div class="card">
     <h2>Current emergency contact</h2>
@@ -177,6 +216,8 @@
   const phoneInput = document.getElementById('phoneInput');
   const saveBtn = document.getElementById('saveBtn');
   const sosBtn = document.getElementById('sosBtn');
+  const modeStatus = document.getElementById('modeStatus');
+  const modeDescription = document.getElementById('modeDescription');
 
   function setError(text) {
     errorBanner.textContent = text || '';
@@ -188,6 +229,45 @@
     successBanner.classList.toggle('visible', !!text);
     if (text) errorBanner.classList.remove('visible');
   }
+
+  // ---------- Assistance mode ----------
+  // Controls how much detail/pacing scene description and navigation give —
+  // not what the app can do. Shared with index.html via the same
+  // localStorage key so a change here applies everywhere immediately.
+  const MODE_INFO = {
+    independent: {
+      label: 'Independent',
+      desc: 'Minimal spoken output — only what\u2019s actionable or a hazard. Best when you want to move fast and rely on your own judgment for the rest.'
+    },
+    guided: {
+      label: 'Guided',
+      desc: 'Full descriptions and step-by-step directions, offered rather than forced. The default, balanced mode.'
+    },
+    support: {
+      label: 'Support',
+      desc: 'Slower pace, more context, and check-ins along the way. Good for unfamiliar places or days you want extra reassurance.'
+    }
+  };
+
+  let assistanceMode = localStorage.getItem('assistanceMode') || 'guided';
+  if (!MODE_INFO[assistanceMode]) assistanceMode = 'guided';
+
+  function renderModeUI() {
+    Object.keys(MODE_INFO).forEach(m => {
+      document.getElementById('modeBtn-' + m).classList.toggle('active', m === assistanceMode);
+    });
+    modeStatus.textContent = MODE_INFO[assistanceMode].label;
+    modeDescription.textContent = MODE_INFO[assistanceMode].desc;
+  }
+  renderModeUI();
+
+  Object.keys(MODE_INFO).forEach(m => {
+    document.getElementById('modeBtn-' + m).addEventListener('click', () => {
+      assistanceMode = m;
+      localStorage.setItem('assistanceMode', m);
+      renderModeUI();
+    });
+  });
 
   // Same generation logic as the main app, so both pages agree on identity
   // if this page is ever opened before index.html has run once.

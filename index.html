@@ -667,6 +667,27 @@
   // starting overlapping fake scans.
   let deviceScanInProgress = {};
 
+  // ---------- Assistance mode ----------
+  // A user preference — set here via voice or in settings.html — that
+  // controls verbosity/pacing for scene description and navigation, not
+  // what the app can do. Shared across pages through the same localStorage
+  // key, so a change in either place applies everywhere.
+  const ASSISTANCE_MODES = ['independent', 'guided', 'support'];
+  let assistanceMode = localStorage.getItem('assistanceMode') || 'guided';
+  if (!ASSISTANCE_MODES.includes(assistanceMode)) assistanceMode = 'guided';
+
+  function setAssistanceMode(mode) {
+    if (!ASSISTANCE_MODES.includes(mode)) return;
+    assistanceMode = mode;
+    localStorage.setItem('assistanceMode', mode);
+  }
+
+  const MODE_COMMANDS = [
+    { keywords: ['independent mode', 'independence mode'], mode: 'independent', label: 'Independent' },
+    { keywords: ['guided mode'], mode: 'guided', label: 'Guided' },
+    { keywords: ['support mode', 'slow down', 'slower please', "i'm overwhelmed", 'im overwhelmed'], mode: 'support', label: 'Support' }
+  ];
+
   const DESCRIBE_KEYWORDS = [
     'describe', 'what is around', "what's around", 'look around',
     'new picture', 'take a picture', 'whats here', "what's here",
@@ -1085,7 +1106,8 @@
     const body = {
       image: activeImageBase64,
       history: conversationHistory,
-      question: question || ''
+      question: question || '',
+      mode: assistanceMode
     };
 
     const response = await fetch('/api/describe', {
@@ -1502,7 +1524,16 @@
     navProgressCard.style.display = 'block';
     navMetaEl.textContent = `${activeRoute.destinationName} — ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking`;
 
-    await speakAsync(`Route to ${activeRoute.destinationName}. Total distance ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking.`);
+    // Route-start phrasing changes with assistance mode: Independent stays
+    // terse, Guided (default) frames this as ongoing help rather than a
+    // takeover, Support adds pacing language up front so the "no rush"
+    // framing is set before the first step rather than only during it.
+    const routeIntroByMode = {
+      independent: `${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText}.`,
+      guided: `Route to ${activeRoute.destinationName}. Total distance ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking. I'll guide you there, one step at a time.`,
+      support: `Okay, we're heading to ${activeRoute.destinationName}. It's about ${activeRoute.totalDistanceText}, roughly ${activeRoute.totalDurationText} walking. We'll take it one step at a time — no rush.`
+    };
+    await speakAsync(routeIntroByMode[assistanceMode] || routeIntroByMode.guided);
     await speakCurrentStep();
   }
 
@@ -1510,7 +1541,32 @@
     if (!activeRoute) return;
     const step = activeRoute.steps[activeRoute.currentStepIndex];
     navStepTextEl.textContent = `Step ${step.stepNumber}: ${step.instruction} (${step.distanceText})`;
-    await speakAsync(`${step.instruction}. ${step.distanceText}.`);
+
+    if (assistanceMode === 'independent') {
+      // Minimal: just the instruction and distance, nothing else.
+      await speakAsync(`${step.instruction}. ${step.distanceText}.`);
+      return;
+    }
+
+    if (assistanceMode === 'support') {
+      // Break the instruction into smaller spoken chunks with brief pauses
+      // between them, rather than one longer sentence — easier to follow
+      // at a slower, steadier pace. Then close with an explicit "no rush"
+      // check-in instead of silently waiting for "next".
+      const chunks = step.instruction
+        .split(/(?<=[.;])\s+|\s+and\s+(?=\w)/i)
+        .map(c => c.trim())
+        .filter(Boolean);
+      for (let i = 0; i < chunks.length; i++) {
+        await speakAsync(chunks[i]);
+        if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 400));
+      }
+      await speakAsync(`That's about ${step.distanceText}. Take your time — say next, or tap Next, whenever you're ready.`);
+      return;
+    }
+
+    // Guided (default): current balanced phrasing.
+    await speakAsync(`${step.instruction}. That's about ${step.distanceText}.`);
   }
 
   async function advanceToNextStep() {
@@ -1570,6 +1626,13 @@
 
       if (EMERGENCY_KEYWORDS.some(k => lower.includes(k))) {
         await handleEmergencyIntent();
+        return;
+      }
+      const modeCommand = MODE_COMMANDS.find(cmd => cmd.keywords.some(k => lower.includes(k)));
+      if (modeCommand) {
+        setAssistanceMode(modeCommand.mode);
+        await speakAsync(`Switched to ${modeCommand.label} mode.`);
+        resetToIdle();
         return;
       }
       if (CALL_KEYWORDS.some(k => lower.includes(k))) {

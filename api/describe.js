@@ -16,7 +16,7 @@ const MODEL_ID = 'us.anthropic.claude-sonnet-4-5-20250929-v1:0';
 //      Claude infers this from the transcribed question, in English,
 //      Swahili, or code-switched phrasing.
 //   3. Follow-ups: keep answers short, same spoken tone.
-const SYSTEM_PROMPT =
+const BASE_SYSTEM_PROMPT =
   'You are helping a blind or low-vision person understand their surroundings through a phone camera. ' +
   'Speak plainly and directly, as if narrating out loud to them — never say things like "this image shows" or "I see". ' +
   '\n\nIf the user asks you to read, or their words suggest they want visible text read aloud (a sign, label, document, screen, menu, etc.), ' +
@@ -26,6 +26,36 @@ const SYSTEM_PROMPT =
   '(left, right, ahead), any people, and anything that could be a hazard (steps, obstacles, open doors, spills). ' +
   'If there is no specific question, give this default scene description. ' +
   '\n\nFor any follow-up question, keep the answer short (1-3 sentences) and just as direct.';
+
+// Assistance mode: a user preference (set in Settings or by voice command)
+// controlling verbosity and tone, layered on top of the base behavior
+// above rather than replacing it. This is the "confidence-building
+// guidance" piece — the same underlying description/reading behavior,
+// delivered at the pace and level of detail the user actually wants,
+// rather than the app deciding that for them.
+const MODE_INSTRUCTIONS = {
+  independent:
+    'The user has chosen Independent mode: they want minimal spoken output and prefer to rely on their own judgment. ' +
+    'Only mention what is actionable or a genuine hazard (obstacles, steps, open doors, spills, moving people or vehicles in their path). ' +
+    'Skip ambient detail, atmosphere, and anything not immediately useful. Keep answers as short as possible — often a single short sentence. ' +
+    'Do not add reassurance or check-ins; they did not ask for that.',
+  guided:
+    'The user has chosen Guided mode (the default, balanced mode): give a full, clear description or reading as normal. ' +
+    'Phrase things as help being available rather than assuming they want everything narrated at once — for example, ' +
+    'mention what is ahead and offer to continue or add detail, rather than dumping every detail unprompted. ' +
+    'Keep the tone plain and direct, not overly cautious.',
+  support:
+    'The user has chosen Support mode: they want a slower, steadier pace with more context, for an unfamiliar or overwhelming moment. ' +
+    'Give a bit more context than usual and describe things progressively rather than all at once — it is fine to mention one or two ' +
+    'things now and note there is more if they want it. Use a warm, calm tone, but stay natural and direct — not clinical, not saccharine, ' +
+    'and never imply you are providing therapy or emotional counseling. A brief, genuine check-in is fine (e.g. "Let me know if you want more detail"), ' +
+    'but keep it light and infrequent rather than in every response.'
+};
+
+function buildSystemPrompt(mode) {
+  const modeInstruction = MODE_INSTRUCTIONS[mode] || MODE_INSTRUCTIONS.guided;
+  return `${BASE_SYSTEM_PROMPT}\n\n${modeInstruction}`;
+}
 
 const DEFAULT_QUESTION_TEXT = 'Describe what is in front of me.';
 
@@ -45,7 +75,10 @@ export default async function handler(req, res) {
     //           itself now handles that fallback behavior, so we just pass
     //           a plain placeholder through rather than swapping in a whole
     //           separate prompt string.
-    const { image, history, question } = req.body;
+    // mode: the user's assistance-mode preference ('independent' | 'guided'
+    //       | 'support'), read client-side from localStorage. Defaults to
+    //       'guided' if missing or unrecognized.
+    const { image, history, question, mode } = req.body;
 
     if (!image) {
       return res.status(400).json({ error: 'Missing image data' });
@@ -114,7 +147,7 @@ export default async function handler(req, res) {
 
     const command = new ConverseCommand({
       modelId: MODEL_ID,
-      system: [{ text: SYSTEM_PROMPT }],
+      system: [{ text: buildSystemPrompt(mode) }],
       messages,
       inferenceConfig: {
         maxTokens: 700,
