@@ -520,6 +520,58 @@
     margin-top: 8px;
   }
   .test-voice-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+
+  /* ---------- My People (SOS tab) ---------- */
+  .person-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #000;
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .person-info { flex: 1; min-width: 0; }
+  .person-name { color: #fff; font-weight: 700; font-size: 15px; }
+  .person-rel { color: #999; font-size: 13px; margin-top: 2px; }
+  .person-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .person-action-btn {
+    position: relative;
+    z-index: 5;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 8px;
+    border: 2px solid #333;
+    background: #111;
+    color: #FFD400;
+  }
+  .person-action-btn.remove { color: #FF6B6B; }
+  .person-action-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+  .no-people-text {
+    color: #888;
+    font-size: 15px;
+    margin: 4px 0 14px;
+  }
+  .add-person-form {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .add-person-form input {
+    padding: 12px;
+    font-size: 15px;
+    background: #000;
+    color: #fff;
+    border: 2px solid #333;
+    border-radius: 10px;
+  }
+  .add-person-form input:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 1px; }
+  .add-person-form-actions { display: flex; gap: 8px; }
+  .add-person-form-actions button { margin-top: 0; flex: 1; }
 </style>
 </head>
 <body>
@@ -563,9 +615,30 @@
         <button class="secondary-link-btn" id="manualContactSaveBtn" type="button">Save</button>
       </div>
     </div>
+
+    <div class="sos-card" style="text-align:left;">
+      <h2 style="margin:0 0 6px; font-size:17px; color:#fff;">My People</h2>
+      <p class="sos-help-text" style="margin-top:0;">
+        People you trust, for when you just want to talk — separate from your emergency contact above.
+      </p>
+      <div id="myPeopleList"></div>
+      <button class="secondary-link-btn" id="addPersonBtn" type="button">+ Add a person</button>
+
+      <div class="add-person-form" id="addPersonForm" style="display:none;">
+        <input type="text" id="personNameInput" placeholder="Name" />
+        <input type="text" id="personRelationshipInput" placeholder="Relationship (e.g. Sister, Friend)" />
+        <input type="tel" id="personPhoneInput" placeholder="Phone number" inputmode="numeric" />
+        <div class="add-person-form-actions">
+          <button class="secondary-link-btn" id="savePersonBtn" type="button">Save</button>
+          <button class="secondary-link-btn" id="cancelPersonBtn" type="button" style="border-color:#666; color:#999;">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <div class="sos-help-text">
       You can also long-press anywhere on the screen, or say "emergency" or "help me", to send an SOS at any time — from any screen.
       Say "did they confirm" to check if your contact has responded, or "is my contact confirmed" to check their setup status.
+      Say "I need someone to talk to" to reach someone from your My People list.
       <br /><br />
       Having trouble with the buttons or voice above? Use the
       <a href="/settings.html" style="color:#FFD400; font-weight:700;">plain settings page</a> instead.
@@ -733,6 +806,14 @@
   const changeContactBtn = document.getElementById('changeContactBtn');
   const manualContactInput = document.getElementById('manualContactInput');
   const manualContactSaveBtn = document.getElementById('manualContactSaveBtn');
+  const myPeopleListEl = document.getElementById('myPeopleList');
+  const addPersonBtn = document.getElementById('addPersonBtn');
+  const addPersonForm = document.getElementById('addPersonForm');
+  const personNameInput = document.getElementById('personNameInput');
+  const personRelationshipInput = document.getElementById('personRelationshipInput');
+  const personPhoneInput = document.getElementById('personPhoneInput');
+  const savePersonBtn = document.getElementById('savePersonBtn');
+  const cancelPersonBtn = document.getElementById('cancelPersonBtn');
   const placesView = document.getElementById('placesView');
   const savedPlacesListEl = document.getElementById('savedPlacesList');
   const newDestinationBtn = document.getElementById('newDestinationBtn');
@@ -816,6 +897,17 @@
   let awaitingContactConfirmation = false;
   let pendingContactDigits = null;
   let activeSosId = null;
+
+  // ---------- My People state ----------
+  // A separate, private list of trusted contacts Newton can reach just to
+  // talk — distinct from the single emergencyContact slot above, which is
+  // specifically for the SOS "send help" flow. No server component: this
+  // is purely local, since there's nothing here that needs a push
+  // notification or a confirmation round-trip the way SOS does.
+  let myPeople = [];
+  try {
+    myPeople = JSON.parse(localStorage.getItem('myPeople') || '[]');
+  } catch (e) { myPeople = []; }
 
   // ---------- Navigation / Places state ----------
   // savedPlaces: destinations Newton has actually navigated to before,
@@ -906,6 +998,7 @@
   const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact'];
   const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed'];
   const CONTACT_STATUS_KEYWORDS = ['is my contact confirmed', 'check my contact', 'contact status', 'is my contact set up'];
+  const TALK_TO_SOMEONE_KEYWORDS = ['someone to talk to', 'talk to someone', "don't want to be alone", 'dont want to be alone', 'i need to talk'];
   const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to'];
   const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue'];
 
@@ -1004,6 +1097,7 @@
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     if (tab === 'sos') {
       renderSosScreen();
+      renderMyPeopleList();
       if (emergencyContact && !emergencyContact.confirmed) {
         checkContactConfirmation({ speakResult: false });
       }
@@ -1035,6 +1129,131 @@
       ? 'confirmed and ready'
       : 'invited, waiting for them to confirm';
     contactStatusEl.textContent = `Emergency contact: ${spacedDigits(emergencyContact.phone)} (${confirmLabel})`;
+  }
+
+  // ---------- My People (SOS tab) ----------
+  function saveMyPeople() {
+    localStorage.setItem('myPeople', JSON.stringify(myPeople));
+  }
+
+  function renderMyPeopleList() {
+    if (!myPeople.length) {
+      myPeopleListEl.innerHTML = '<div class="no-people-text">No trusted contacts added yet.</div>';
+      return;
+    }
+    myPeopleListEl.innerHTML = '';
+    myPeople.forEach(person => {
+      const row = document.createElement('div');
+      row.className = 'person-row';
+      const relText = person.relationship ? ` (${person.relationship})` : '';
+      row.innerHTML = `
+        <div class="person-info">
+          <div class="person-name">${person.name}${relText}</div>
+        </div>
+        <div class="person-actions">
+          <button class="person-action-btn" data-id="${person.id}" data-action="call" type="button">Call</button>
+          <button class="person-action-btn" data-id="${person.id}" data-action="text" type="button">Text</button>
+          <button class="person-action-btn remove" data-id="${person.id}" data-action="remove" type="button">Remove</button>
+        </div>
+      `;
+      myPeopleListEl.appendChild(row);
+    });
+  }
+
+  function resetAddPersonForm() {
+    personNameInput.value = '';
+    personRelationshipInput.value = '';
+    personPhoneInput.value = '';
+  }
+
+  addPersonBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = addPersonForm.style.display === 'none';
+    addPersonForm.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden) personNameInput.focus();
+  });
+
+  cancelPersonBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    resetAddPersonForm();
+    addPersonForm.style.display = 'none';
+  });
+
+  savePersonBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setError('');
+    const name = (personNameInput.value || '').trim();
+    const relationship = (personRelationshipInput.value || '').trim();
+    const digits = (personPhoneInput.value || '').replace(/\D/g, '');
+
+    if (!name) {
+      setError('Enter a name.');
+      return;
+    }
+    if (!digits || digits.length < 7) {
+      setError('Enter a valid phone number (7+ digits).');
+      return;
+    }
+
+    myPeople.push({
+      id: (crypto.randomUUID ? crypto.randomUUID() : 'person-' + Date.now() + '-' + Math.random().toString(16).slice(2)),
+      name,
+      relationship,
+      phone: digits
+    });
+    saveMyPeople();
+    renderMyPeopleList();
+    resetAddPersonForm();
+    addPersonForm.style.display = 'none';
+  });
+
+  myPeopleListEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.person-action-btn');
+    if (!btn) return;
+    e.stopPropagation();
+
+    const person = myPeople.find(p => p.id === btn.dataset.id);
+    if (!person) return;
+
+    if (btn.dataset.action === 'call') {
+      window.location.href = `tel:${person.phone}`;
+    } else if (btn.dataset.action === 'text') {
+      const message = `Hi ${person.name}, just wanted to talk when you have a moment.`;
+      window.location.href = `sms:${person.phone}?body=${encodeURIComponent(message)}`;
+    } else if (btn.dataset.action === 'remove') {
+      myPeople = myPeople.filter(p => p.id !== person.id);
+      saveMyPeople();
+      renderMyPeopleList();
+    }
+  });
+
+  // Voice trigger: "I need someone to talk to". Reads the saved names
+  // aloud, listens for who they mean, and calls that person directly —
+  // this is emotional-support routing, not the emergency escalation path,
+  // so it deliberately never touches SOS state or the emergency contact.
+  async function handleTalkToSomeoneIntent() {
+    if (!myPeople.length) {
+      await speakAsync('You have not added anyone to My People yet. You can add someone from the SOS tab.');
+      return;
+    }
+    const names = myPeople.map(p => p.name).join(', ');
+    await speakAsync(`You can reach: ${names}. Who would you like to call?`);
+
+    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+    if (!heard) {
+      await speakAsync("I didn't catch that. You can also tap a name under My People in the SOS tab.");
+      return;
+    }
+
+    const lower = heard.toLowerCase();
+    const match = myPeople.find(p => lower.includes(p.name.toLowerCase()));
+    if (!match) {
+      await speakAsync("I couldn't match that to someone in your list. You can tap a name under My People in the SOS tab.");
+      return;
+    }
+
+    await speakAsync(`Calling ${match.name}.`);
+    window.location.href = `tel:${match.phone}`;
   }
 
   // ---------- Settings screen ----------
@@ -2005,6 +2224,11 @@
         resetToIdle();
         return;
       }
+      if (TALK_TO_SOMEONE_KEYWORDS.some(k => lower.includes(k))) {
+        await handleTalkToSomeoneIntent();
+        resetToIdle();
+        return;
+      }
       // Only treat "next" as an advance command while a route is actually
       // active — otherwise a stray "next" in normal conversation would
       // wrongly get swallowed here instead of reaching the description flow.
@@ -2146,6 +2370,7 @@
   }
 
   renderSosScreen();
+  renderMyPeopleList();
   renderPlacesScreen();
   renderDevicesScreen();
   renderSettingsScreen();
