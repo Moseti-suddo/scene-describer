@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Scene Describer</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -355,6 +357,20 @@
     line-height: 1.5;
   }
 
+  .route-map-card {
+  margin-top: 16px;
+  border: 2px solid #333;
+  border-radius: 12px;
+  overflow: hidden;
+  display: none;
+}
+#routeMap {
+  width: 100%;
+  height: 220px;
+}
+/* Mapbox's own attribution/logo controls, kept legible on the dark theme */
+.mapboxgl-ctrl-attrib, .mapboxgl-ctrl-logo { opacity: 0.8; }
+
   /* ---------- Devices screen ---------- */
   .device-card {
     background: #111;
@@ -662,6 +678,10 @@
       <button class="next-step-btn" id="nextStepBtn" type="button">Next</button>
     </div>
 
+    <div class="route-map-card" id="routeMapCard">
+    <div id="routeMap" role="img" aria-label="Map showing your walking route"></div>
+    </div>
+
     <div class="places-help-text">
       You can also say "navigate to", "take me to", or "directions to" followed by a place, from any screen.
       While a route is playing, say "next", or tap Next, to hear the next step.
@@ -823,6 +843,7 @@
   const navMetaEl = document.getElementById('navMeta');
   const navStepTextEl = document.getElementById('navStepText');
   const nextStepBtn = document.getElementById('nextStepBtn');
+  const routeMapCard = document.getElementById('routeMapCard');
   const devicesView = document.getElementById('devicesView');
   const settingsView = document.getElementById('settingsView');
   const settingsModeStatusEl = document.getElementById('settingsModeStatus');
@@ -2041,6 +2062,81 @@
     });
   });
 
+    // ---------- Route map (Mapbox GL JS) ----------
+  // Public token — safe to embed client-side, this is the intended use
+  // for a Mapbox public token (unlike the server-side one in api/navigate.js,
+  // which never reaches the browser). Same "default public token" from
+  // account.mapbox.com used there.
+  const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoibW9zZXRpIiwiYSI6ImNtdGsydTZpMDBnMzYyenF3MXBibnk4aDMifQ.F7ChrW9Wd3e5fnzgHilnRA';
+  if (window.mapboxgl) mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
+
+  let routeMap = null;
+  let routeMapMarkers = { origin: null, dest: null, current: null };
+
+  function ensureRouteMap() {
+    if (routeMap || !window.mapboxgl) return routeMap;
+    routeMap = new mapboxgl.Map({
+      container: 'routeMap',
+      style: 'mapbox://styles/mapbox/dark-v11',
+      center: [36.8219, -1.2921], // Nairobi fallback center until a route loads
+      zoom: 12
+    });
+    routeMap.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
+    return routeMap;
+  }
+
+  function renderRouteMap(route) {
+    if (!window.mapboxgl || !route.routeGeometry) return; // fail quietly — voice guidance still works without the map
+    routeMapCard.style.display = 'block';
+    const map = ensureRouteMap();
+    if (!map) return;
+
+    const drawRoute = () => {
+      if (map.getSource('route')) {
+        map.getSource('route').setData({ type: 'Feature', geometry: route.routeGeometry });
+      } else {
+        map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: route.routeGeometry } });
+        map.addLayer({
+          id: 'route-line',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#FFD400', 'line-width': 5 }
+        });
+      }
+
+      if (routeMapMarkers.origin) routeMapMarkers.origin.remove();
+      if (routeMapMarkers.dest) routeMapMarkers.dest.remove();
+      routeMapMarkers.origin = new mapboxgl.Marker({ color: '#4ADE80' })
+        .setLngLat([route.originLng, route.originLat]).addTo(map);
+      routeMapMarkers.dest = new mapboxgl.Marker({ color: '#FF3B30' })
+        .setLngLat([route.destLng, route.destLat]).addTo(map);
+
+      const coords = route.routeGeometry.coordinates;
+      const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
+      map.fitBounds(bounds, { padding: 40, duration: 0 });
+
+      updateRouteMapStep(route);
+    };
+
+    if (map.isStyleLoaded()) drawRoute(); else map.once('load', drawRoute);
+  }
+
+  function updateRouteMapStep(route) {
+    if (!routeMap || !window.mapboxgl) return;
+    const step = route.steps[route.currentStepIndex];
+    if (!step || step.lat == null || step.lng == null) return;
+
+    if (routeMapMarkers.current) {
+      routeMapMarkers.current.setLngLat([step.lng, step.lat]);
+    } else {
+      const el = document.createElement('div');
+      el.style.cssText = 'width:16px;height:16px;border-radius:50%;background:#FFD400;border:3px solid #000;';
+      routeMapMarkers.current = new mapboxgl.Marker({ element: el }).setLngLat([step.lng, step.lat]).addTo(routeMap);
+    }
+    routeMap.easeTo({ center: [step.lng, step.lat], duration: 500 });
+  }
+
   // ---------- Navigation flow ----------
   // beginRoute does the real work: reads current position once, calls
   // /api/navigate for a real geocoded destination + real walking directions,
@@ -2084,6 +2180,9 @@
       destinationName: data.destinationName,
       destLat: data.destinationLat,
       destLng: data.destinationLng,
+      originLat: data.originLat,
+      originLng: data.originLng,
+      routeGeometry: data.routeGeometry,
       steps: data.steps,
       currentStepIndex: 0,
       totalDistanceText: data.totalDistanceText,
@@ -2091,6 +2190,7 @@
     };
 
     navProgressCard.style.display = 'block';
+    renderRouteMap(activeRoute);
     navMetaEl.textContent = `${activeRoute.destinationName} — ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking`;
 
     // Route-start phrasing changes with assistance mode: Independent stays
@@ -2149,11 +2249,13 @@
       await speakAsync(`You've arrived at ${activeRoute.destinationName}.`);
       recordPlaceVisit(activeRoute.destinationName, activeRoute.destLat, activeRoute.destLng);
       navProgressCard.style.display = 'none';
+      routeMapCard.style.display = 'none';
       activeRoute = null;
       renderPlacesScreen();
       return;
     }
     await speakCurrentStep();
+    updateRouteMapStep(activeRoute);
   }
 
   async function startNavigationToText(destinationText) {

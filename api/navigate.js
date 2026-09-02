@@ -125,20 +125,33 @@ export default async function handler(req, res) {
     const route = directionsData.routes[0];
     const leg = route.legs[0]; // Single-leg trip: one origin, one destination, no waypoints
 
-    const steps = leg.steps.map((step, i) => ({
-      stepNumber: i + 1,
-      instruction: (step.maneuver && step.maneuver.instruction) || '',
-      distanceMeters: step.distance,
-      distanceText: metersToWalkingText(step.distance)
-    }));
+    const steps = leg.steps.map((step, i) => {
+      // maneuver.location is where this step's instruction applies —
+      // used by the frontend to move a "you are here" marker as the user
+      // advances through steps, not just to draw the route line.
+      const loc = step.maneuver && step.maneuver.location;
+      return {
+        stepNumber: i + 1,
+        instruction: (step.maneuver && step.maneuver.instruction) || '',
+        distanceMeters: step.distance,
+        distanceText: metersToWalkingText(step.distance),
+        lat: loc ? loc[1] : null,
+        lng: loc ? loc[0] : null
+      };
+    });
 
     return res.status(200).json({
       destinationName,
       destinationLat: destLat,
       destinationLng: destLng,
+      originLat: lat,
+      originLng: lng,
       totalDistanceMeters: leg.distance,
       totalDistanceText: metersToWalkingText(leg.distance),
       totalDurationText: secondsToWalkingText(leg.duration),
+      // GeoJSON LineString of the full walking path, for drawing the
+      // route on the map. `overview: 'simplified'` above keeps this small.
+      routeGeometry: route.geometry,
       steps
     });
 
