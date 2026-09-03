@@ -946,6 +946,38 @@
   let activeRoute = null;
   let navigationInProgress = false; // mirrors contactSetupInProgress's guard pattern
 
+  // ---------- Offline route caching (demo resilience) ----------
+  // Not general offline navigation — just a fallback so a route you've
+  // successfully fetched once still works if the connection drops later
+  // (e.g. venue wifi flaking mid-demo). Keyed by destination text.
+  const CACHED_ROUTES_KEY = 'cachedRoutes';
+
+  function normalizeDestKey(text) {
+    return (text || '').trim().toLowerCase();
+  }
+
+  function getCachedRoutes() {
+    try {
+      return JSON.parse(localStorage.getItem(CACHED_ROUTES_KEY) || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveCachedRoute(destinationText, data) {
+    const cache = getCachedRoutes();
+    cache[normalizeDestKey(destinationText)] = { destinationText, data, cachedAt: Date.now() };
+    try {
+      localStorage.setItem(CACHED_ROUTES_KEY, JSON.stringify(cache));
+    } catch (e) {
+      // Storage full/unavailable — non-fatal, just skip caching this time.
+    }
+  }
+
+  function getCachedRoute(destinationText) {
+    return getCachedRoutes()[normalizeDestKey(destinationText)] || null;
+  }
+
   // ---------- Devices state ----------
   // Simulated Bluetooth pairing for future hardware accessories (glasses,
   // cane, wrist band) — same honest pattern as onboarding's earbuds step:
@@ -2157,6 +2189,12 @@
   // then speaks the first step. There is no GPS tracking after this point —
   // advanceToNextStep() is what moves through the remaining steps, triggered
   // manually rather than by detected movement.
+  //
+  // Offline resilience: this is not general offline navigation — there is
+  // still no local map data or routing engine on the device. It's a
+  // fallback so a destination that was successfully fetched once keeps
+  // working if the connection (or GPS fix) drops on a later attempt, e.g.
+  // venue wifi flaking mid-demo. See saveCachedRoute()/getCachedRoute().
   async function beginRoute(destinationText) {
     setError('');
     activeRoute = null;
@@ -2165,30 +2203,49 @@
 
     await speakAsync(`Getting directions to ${destinationText}.`);
 
-    let lat, lng;
+    let lat = null, lng = null;
     try {
       const pos = await getPositionPromise({ timeout: 8000 });
       lat = pos.coords.latitude;
       lng = pos.coords.longitude;
     } catch (e) {
-      await speakAsync('I could not get your current location. Please enable location access and try again.');
-      return;
+      // Fall through — try a cached route below before giving up entirely.
     }
 
-    let data;
-    try {
-      const res = await fetch('/api/navigate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ destinationText, lat, lng })
-      });
-      data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not get directions');
-    } catch (err) {
-      const msg = err && err.message ? err.message : 'Something went wrong getting directions.';
-      setError('Navigation failed: ' + msg);
-      await speakAsync(msg);
-      return;
+    let data = null;
+    let usedCachedFallback = false;
+
+    if (lat != null && lng != null) {
+      try {
+        const res = await fetch('/api/navigate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ destinationText, lat, lng })
+        });
+        const fresh = await res.json();
+        if (!res.ok) throw new Error(fresh.error || 'Could not get directions');
+        data = fresh;
+      } catch (err) {
+        data = null; // fall through to cache check below
+      }
+    }
+
+    if (!data) {
+      const cached = getCachedRoute(destinationText);
+      if (cached) {
+        data = cached.data;
+        usedCachedFallback = true;
+      } else {
+        const msg = (lat == null)
+          ? 'I could not get your current location, and no saved route to this destination is available.'
+          : 'Something went wrong getting directions, and no saved route to this destination is available.';
+        setError('Navigation failed: ' + msg);
+        await speakAsync(msg);
+        return;
+      }
+    } else {
+      // Fresh route succeeded — cache it in case the connection drops later.
+      saveCachedRoute(destinationText, data);
     }
 
     activeRoute = {
@@ -2207,6 +2264,10 @@
     navProgressCard.style.display = 'block';
     renderRouteMap(activeRoute);
     navMetaEl.textContent = `${activeRoute.destinationName} — ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking`;
+
+    if (usedCachedFallback) {
+      await speakAsync('No connection right now. Using a saved route to this destination from earlier.');
+    }
 
     // Route-start phrasing changes with assistance mode: Independent stays
     // terse, Guided (default) frames this as ongoing help rather than a
