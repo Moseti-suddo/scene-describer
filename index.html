@@ -4,8 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Scene Describer</title>
-<link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
-<script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -356,20 +354,19 @@
     margin-top: 18px;
     line-height: 1.5;
   }
-
   .route-map-card {
-  margin-top: 16px;
-  border: 2px solid #333;
-  border-radius: 12px;
-  overflow: hidden;
-  display: none;
-}
-#routeMap {
-  width: 100%;
-  height: 220px;
-}
-/* Mapbox's own attribution/logo controls, kept legible on the dark theme */
-.mapboxgl-ctrl-attrib, .mapboxgl-ctrl-logo { opacity: 0.8; }
+    margin-top: 16px;
+    border: 2px solid #333;
+    border-radius: 12px;
+    overflow: hidden;
+    display: none;
+  }
+  #routeMap {
+    width: 100%;
+    height: 220px;
+  }
+  /* Mapbox's own attribution/logo controls, kept legible on the dark theme */
+  .mapboxgl-ctrl-attrib, .mapboxgl-ctrl-logo { opacity: 0.8; }
 
   /* ---------- Devices screen ---------- */
   .device-card {
@@ -679,7 +676,7 @@
     </div>
 
     <div class="route-map-card" id="routeMapCard">
-    <div id="routeMap" role="img" aria-label="Map showing your walking route"></div>
+      <div id="routeMap" role="img" aria-label="Map showing your walking route"></div>
     </div>
 
     <div class="places-help-text">
@@ -1125,6 +1122,7 @@
     }
     if (tab === 'places') {
       renderPlacesScreen();
+      if (routeMap) requestAnimationFrame(() => routeMap.resize());
     }
     if (tab === 'devices') {
       renderDevicesScreen();
@@ -2062,12 +2060,14 @@
     });
   });
 
-    // ---------- Route map (Mapbox GL JS) ----------
-  // Public token — safe to embed client-side, this is the intended use
-  // for a Mapbox public token (unlike the server-side one in api/navigate.js,
-  // which never reaches the browser). Same "default public token" from
-  // account.mapbox.com used there.
-  const MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoibW9zZXRpIiwiYSI6ImNtdGsydTZpMDBnMzYyenF3MXBibnk4aDMifQ.F7ChrW9Wd3e5fnzgHilnRA';
+  // ---------- Route map (Mapbox GL JS) ----------
+  // Public token — safe to embed client-side, this is the intended use for
+  // a Mapbox public token (unlike the server-side one in api/navigate.js's
+  // MAPBOX_ACCESS_TOKEN env var, which never reaches the browser). Same
+  // "default public token" from account.mapbox.com used there.
+  //
+  // >>> PASTE YOUR MAPBOX PUBLIC TOKEN BELOW, replacing the placeholder <<<
+  const MAPBOX_ACCESS_TOKEN = 'PASTE_YOUR_MAPBOX_PUBLIC_TOKEN_HERE';
   if (window.mapboxgl) mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
 
   let routeMap = null;
@@ -2088,38 +2088,50 @@
   function renderRouteMap(route) {
     if (!window.mapboxgl || !route.routeGeometry) return; // fail quietly — voice guidance still works without the map
     routeMapCard.style.display = 'block';
-    const map = ensureRouteMap();
-    if (!map) return;
 
-    const drawRoute = () => {
-      if (map.getSource('route')) {
-        map.getSource('route').setData({ type: 'Feature', geometry: route.routeGeometry });
-      } else {
-        map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: route.routeGeometry } });
-        map.addLayer({
-          id: 'route-line',
-          type: 'line',
-          source: 'route',
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: { 'line-color': '#FFD400', 'line-width': 5 }
-        });
-      }
+    // The container was just switched from display:none to block on this
+    // same tick, so its layout box doesn't exist yet — creating (or
+    // resizing) the map immediately has it cache a stale/zero size, which
+    // is what caused tiles never to paint and markers to project to the
+    // wrong spot. Waiting a frame lets the browser actually lay out the
+    // now-visible container first.
+    requestAnimationFrame(() => {
+      const map = ensureRouteMap();
+      if (!map) return;
+      map.resize();
 
-      if (routeMapMarkers.origin) routeMapMarkers.origin.remove();
-      if (routeMapMarkers.dest) routeMapMarkers.dest.remove();
-      routeMapMarkers.origin = new mapboxgl.Marker({ color: '#4ADE80' })
-        .setLngLat([route.originLng, route.originLat]).addTo(map);
-      routeMapMarkers.dest = new mapboxgl.Marker({ color: '#FF3B30' })
-        .setLngLat([route.destLng, route.destLat]).addTo(map);
+      const drawRoute = () => {
+        map.resize(); // in case layout shifted again between init and style load
 
-      const coords = route.routeGeometry.coordinates;
-      const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
-      map.fitBounds(bounds, { padding: 40, duration: 0 });
+        if (map.getSource('route')) {
+          map.getSource('route').setData({ type: 'Feature', geometry: route.routeGeometry });
+        } else {
+          map.addSource('route', { type: 'geojson', data: { type: 'Feature', geometry: route.routeGeometry } });
+          map.addLayer({
+            id: 'route-line',
+            type: 'line',
+            source: 'route',
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#FFD400', 'line-width': 5 }
+          });
+        }
 
-      updateRouteMapStep(route);
-    };
+        if (routeMapMarkers.origin) routeMapMarkers.origin.remove();
+        if (routeMapMarkers.dest) routeMapMarkers.dest.remove();
+        routeMapMarkers.origin = new mapboxgl.Marker({ color: '#4ADE80' })
+          .setLngLat([route.originLng, route.originLat]).addTo(map);
+        routeMapMarkers.dest = new mapboxgl.Marker({ color: '#FF3B30' })
+          .setLngLat([route.destLng, route.destLat]).addTo(map);
 
-    if (map.isStyleLoaded()) drawRoute(); else map.once('load', drawRoute);
+        const coords = route.routeGeometry.coordinates;
+        const bounds = coords.reduce((b, c) => b.extend(c), new mapboxgl.LngLatBounds(coords[0], coords[0]));
+        map.fitBounds(bounds, { padding: 40, duration: 0 });
+
+        updateRouteMapStep(route);
+      };
+
+      if (map.isStyleLoaded()) drawRoute(); else map.once('load', drawRoute);
+    });
   }
 
   function updateRouteMapStep(route) {
@@ -2147,6 +2159,7 @@
     setError('');
     activeRoute = null;
     navProgressCard.style.display = 'none';
+    routeMapCard.style.display = 'none';
 
     await speakAsync(`Getting directions to ${destinationText}.`);
 
