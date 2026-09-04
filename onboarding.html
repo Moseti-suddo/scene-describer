@@ -94,6 +94,23 @@
   }
   .toast.visible { display: block; }
 
+  /* ---------- Voice listening indicator ---------- */
+  .voice-indicator {
+    position: fixed;
+    left: 20px; right: 20px; bottom: 24px;
+    background: #001a12;
+    border: 2px solid #4ADE80;
+    color: #4ADE80;
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    display: none;
+    z-index: 51;
+  }
+  .voice-indicator.visible { display: block; }
+
   /* ---------- Faces screen ---------- */
   .face-list { margin-bottom: 4px; }
   .face-row {
@@ -258,7 +275,8 @@
     <p class="subtitle">
       An accessibility companion that describes your surroundings, reads
       text aloud, helps you navigate, and keeps you connected to help when
-      you need it. Let's set things up.
+      you need it. Let's set things up. You can say what you want any time,
+      or just tap the buttons.
     </p>
     <div class="spacer"></div>
     <button class="primary-btn" id="welcomeNextBtn" type="button">Get Started</button>
@@ -268,7 +286,7 @@
   <div class="step" id="step-profile">
     <div class="progress-text">STEP 1 OF 6</div>
     <h1>Who is this for?</h1>
-    <p class="subtitle">This helps us tailor the experience to you.</p>
+    <p class="subtitle">This helps us tailor the experience to you. Say "visual" or "hearing", or tap a card.</p>
 
     <button class="choice-card" id="profileVisualBtn" type="button">
       <div class="choice-title">I'm blind or visually impaired</div>
@@ -287,7 +305,7 @@
   <div class="step" id="step-language">
     <div class="progress-text">STEP 2 OF 6</div>
     <h1>Choose your language</h1>
-    <p class="subtitle">You can mix languages any time while talking to the app — this just sets the app's own voice.</p>
+    <p class="subtitle">You can mix languages any time while talking to the app — this just sets the app's own voice. Say "English" or "Kiswahili".</p>
 
     <button class="choice-card" id="langEnBtn" type="button">
       <div class="choice-title">English</div>
@@ -304,7 +322,7 @@
   <div class="step" id="step-faces">
     <div class="progress-text">STEP 3 OF 6</div>
     <h1>Register Familiar Faces</h1>
-    <p class="subtitle">Add people close to you now, for faster recognition later. Fully optional.</p>
+    <p class="subtitle">Add people close to you now, for faster recognition later. Fully optional. Say "add a person" or "skip".</p>
 
     <div class="face-list" id="faceList"></div>
 
@@ -348,7 +366,7 @@
   <div class="step" id="step-bluetooth">
     <div class="progress-text">STEP 4 OF 6</div>
     <h1>Connect a Bluetooth Device</h1>
-    <p class="subtitle">Pair an earpiece so responses speak privately in your ear.</p>
+    <p class="subtitle">Pair an earpiece so responses speak privately in your ear. Say "pair" or "skip".</p>
 
     <div class="bt-card">
       <div class="bt-icon" id="btIcon">🎧</div>
@@ -420,10 +438,12 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="voice-indicator" id="voiceIndicator">Listening…</div>
 
 <script>
   const appEl = document.getElementById('app');
   const toastEl = document.getElementById('toast');
+  const voiceIndicatorEl = document.getElementById('voiceIndicator');
 
   // ---------- Shared state, written to localStorage on finish ----------
   const state = {
@@ -443,17 +463,391 @@
     showToast._t = setTimeout(() => toastEl.classList.remove('visible'), ms);
   }
 
-  function speak(text) {
-    if (!('speechSynthesis' in window)) return;
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  // ---------- Voice: narration (TTS) ----------
+  // Speaks regardless of whether the mic/voice-input pipeline is supported,
+  // since narration is pure output — useful even on a device that can't
+  // record audio for transcription.
+  function speak(text, onDone) {
+    if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.rate = state.voicePrefs.rate || 1;
+
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(safetyTimer);
+      if (onDone) onDone();
+    };
+    utter.onend = finish;
+    utter.onerror = finish;
+
+    // Same safety net as the main app: some browsers occasionally never
+    // fire onend, which would otherwise hang every await speakAsync() call
+    // and freeze the whole onboarding flow.
+    const estimatedMs = Math.max(4000, text.length * 90);
+    const safetyTimer = setTimeout(finish, estimatedMs);
+
     window.speechSynthesis.speak(utter);
   }
 
+  function speakAsync(text) {
+    return new Promise(resolve => speak(text, resolve));
+  }
+
+  // ---------- Voice: capture & transcription (record audio, transcribe via Whisper) ----------
+  // Same pipeline as the main app (index.html) — Groq Whisper via
+  // /api/transcribe, with silence detection so it auto-stops when the
+  // person finishes talking, rather than needing a manual stop gesture.
+  let voiceSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  let micStream = null;
+
+  async function ensureMicStream() {
+    if (micStream && micStream.active) return micStream;
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    return micStream;
+  }
+
+  function pickRecorderMimeType() {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+    for (const type of candidates) {
+      if (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) return type;
+    }
+    return '';
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result || '').split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function transcribeAudio(blob, mimeType) {
+    const base64 = await blobToBase64(blob);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audio: base64, mimeType }),
+        signal: controller.signal
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Transcription failed');
+      return (data.text || '').trim();
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  const SILENCE_RMS_THRESHOLD = 0.02;
+  const SILENCE_STOP_DELAY_MS = 1200;
+  const MIN_SPEECH_BEFORE_STOP_MS = 300;
+
+  function listenOnce({ timeoutMs = 6000 } = {}) {
+    return new Promise((resolve) => {
+      if (!voiceSupported) { resolve(null); return; }
+
+      let finished = false;
+      let recorder = null;
+      let audioContext = null;
+      let silenceTimer = null;
+      let hardTimeoutTimer = null;
+      let hasHeardSpeech = false;
+      let mimeType = '';
+      const chunks = [];
+      const startedAt = Date.now();
+
+      const cleanup = () => {
+        if (silenceTimer) clearTimeout(silenceTimer);
+        if (hardTimeoutTimer) clearTimeout(hardTimeoutTimer);
+        if (audioContext) { try { audioContext.close(); } catch (e) {} }
+        voiceIndicatorEl.classList.remove('visible');
+      };
+
+      const finish = async (recordedBlob) => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+
+        if (!recordedBlob || recordedBlob.size === 0) { resolve(null); return; }
+
+        try {
+          const text = await transcribeAudio(recordedBlob, mimeType);
+          resolve(text || null);
+        } catch (err) {
+          resolve(null);
+        }
+      };
+
+      (async () => {
+        try {
+          const stream = await ensureMicStream();
+          mimeType = pickRecorderMimeType();
+          recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+          recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+          recorder.onstop = () => finish(new Blob(chunks, { type: mimeType || 'audio/webm' }));
+
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(stream);
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+          const checkVolume = () => {
+            if (finished) return;
+            analyser.getByteTimeDomainData(dataArray);
+            let sumSquares = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              const normalized = (dataArray[i] - 128) / 128;
+              sumSquares += normalized * normalized;
+            }
+            const rms = Math.sqrt(sumSquares / dataArray.length);
+
+            if (rms > SILENCE_RMS_THRESHOLD) {
+              hasHeardSpeech = true;
+              if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+            } else if (hasHeardSpeech && !silenceTimer && (Date.now() - startedAt) > MIN_SPEECH_BEFORE_STOP_MS) {
+              silenceTimer = setTimeout(() => {
+                if (recorder && recorder.state === 'recording') recorder.stop();
+              }, SILENCE_STOP_DELAY_MS);
+            }
+
+            if (!finished) requestAnimationFrame(checkVolume);
+          };
+
+          voiceIndicatorEl.textContent = 'Listening…';
+          voiceIndicatorEl.classList.add('visible');
+
+          recorder.start();
+          requestAnimationFrame(checkVolume);
+
+          hardTimeoutTimer = setTimeout(() => {
+            if (recorder && recorder.state === 'recording') recorder.stop();
+          }, timeoutMs);
+
+        } catch (err) {
+          finished = true;
+          cleanup();
+          resolve(null);
+        }
+      })();
+    });
+  }
+
+  function matchesAny(text, keywords) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return keywords.some(k => lower.includes(k));
+  }
+
+  // ---------- Step navigation + voice dispatch ----------
+  // Every step transition bumps activeStepToken. Each voice flow captures
+  // its own token when it starts listening; if the person taps ahead
+  // manually while a voice prompt is still mid-listen, the token will have
+  // moved on by the time transcription comes back, and the stale result is
+  // simply discarded rather than acting on a step that's no longer active.
+  let activeStepToken = 0;
+
   const steps = ['welcome', 'profile', 'language', 'faces', 'add-face', 'bluetooth', 'personalize', 'tutorial'];
   function goToStep(id) {
+    activeStepToken += 1;
+    const myToken = activeStepToken;
     steps.forEach(s => document.getElementById('step-' + s).classList.toggle('active', s === id));
+    runStepVoice(id, myToken);
+  }
+
+  async function runStepVoice(id, token) {
+    const stale = () => token !== activeStepToken;
+
+    if (id === 'welcome') {
+      await speakAsync("Welcome to Scene Describer. An accessibility companion that describes your surroundings, reads text aloud, helps you navigate, and keeps you connected to help when you need it. Say get started, or tap Get Started, to begin.");
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['get started', 'start', 'continue', 'begin'])) {
+        goToStep('profile');
+      }
+      return;
+    }
+
+    if (id === 'profile') {
+      await speakAsync("Who is this for? Say visual, if you are blind or visually impaired. Say hearing, if you are deaf or hard of hearing.");
+      let heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['visual', 'blind'])) {
+        selectProfileVisual();
+        goToStep('language');
+        return;
+      }
+      if (matchesAny(heard, ['hearing', 'deaf'])) {
+        showToast("Coming soon! This experience isn't built yet — stay tuned.");
+        await speakAsync("That option isn't ready yet. Say visual to continue, or tap the visual card.");
+        heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+        if (stale()) return;
+        if (matchesAny(heard, ['visual', 'blind'])) {
+          selectProfileVisual();
+          goToStep('language');
+        }
+      }
+      return;
+    }
+
+    if (id === 'language') {
+      await speakAsync('Choose your language. Say English, or say Kiswahili.');
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['swahili', 'kiswahili'])) {
+        selectLanguage('sw');
+        goToStep('faces');
+      } else if (matchesAny(heard, ['english'])) {
+        selectLanguage('en');
+        goToStep('faces');
+      }
+      return;
+    }
+
+    if (id === 'faces') {
+      await speakAsync('You can add people close to you now, for faster recognition later. This step is optional. Say add a person, or say skip.');
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['add a person', 'add person', 'add someone', 'add'])) {
+        goToStep('add-face');
+        startFaceCamera();
+      } else if (matchesAny(heard, ['skip', 'done', 'continue', 'next'])) {
+        goToStep('bluetooth');
+      }
+      return;
+    }
+
+    if (id === 'add-face') {
+      await speakAsync("Say capture when you're ready, or tap Capture Photo.");
+      const heardCapture = voiceSupported ? await listenOnce({ timeoutMs: 8000 }) : null;
+      if (stale()) return;
+      if (!matchesAny(heardCapture, ['capture', 'take a photo', 'take photo', 'photo'])) {
+        // Nothing recognized — leave the manual capture button available.
+        return;
+      }
+
+      const captured = doCapturePhoto();
+      if (stale()) return;
+      if (!captured) {
+        await speakAsync("I couldn't take the photo just yet. Try tapping Capture Photo instead.");
+        return;
+      }
+
+      await speakAsync('Photo captured. What is their name?');
+      const heardName = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      const name = (heardName || '').trim();
+      if (!name) {
+        await speakAsync("I didn't catch a name. You can type it and use the buttons below instead.");
+        return;
+      }
+
+      await speakAsync('And their relationship to you? Say friend, family, or coworker.');
+      const heardRel = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      let relationship = null;
+      if (matchesAny(heardRel, ['family'])) relationship = 'Family';
+      else if (matchesAny(heardRel, ['coworker', 'co-worker', 'colleague'])) relationship = 'Coworker';
+      else if (matchesAny(heardRel, ['friend'])) relationship = 'Friend';
+      if (!relationship) {
+        await speakAsync("I didn't catch that clearly. You can pick a relationship and tap Save Person instead.");
+        return;
+      }
+
+      doSavePerson(name, relationship);
+      if (stale()) return;
+
+      await speakAsync(`${name} added. Say add another, or say done.`);
+      const heardMore = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heardMore, ['another', 'add another', 'yes'])) {
+        goToStep('add-face');
+        startFaceCamera();
+      } else {
+        goToStep('faces');
+      }
+      return;
+    }
+
+    if (id === 'bluetooth') {
+      await speakAsync('Connect a Bluetooth device, so responses speak privately in your ear. Say pair, or say skip.');
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['pair', 'connect'])) {
+        await runBluetoothPairingVoice();
+        if (stale()) return;
+        goToStep('personalize');
+      } else if (matchesAny(heard, ['skip'])) {
+        goToStep('personalize');
+      }
+      return;
+    }
+
+    if (id === 'personalize') {
+      await speakAsync('A few preferences. How fast should I speak? Say slower, normal, or faster.');
+      let heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['slower', 'slow'])) {
+        state.voicePrefs.rate = 0.8;
+        speedRange.value = 0.8;
+      } else if (matchesAny(heard, ['faster', 'fast'])) {
+        state.voicePrefs.rate = 1.3;
+        speedRange.value = 1.3;
+      } else if (matchesAny(heard, ['normal'])) {
+        state.voicePrefs.rate = 1;
+        speedRange.value = 1;
+      }
+
+      await speakAsync('How often do you want notifications? Say off, normal, or frequent.');
+      heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      let notifValue = null;
+      if (matchesAny(heard, ['off'])) notifValue = 'off';
+      else if (matchesAny(heard, ['frequent'])) notifValue = 'frequent';
+      else if (matchesAny(heard, ['normal'])) notifValue = 'normal';
+      if (notifValue) {
+        state.notificationFrequency = notifValue;
+        notifSegmented.querySelectorAll('button').forEach(b => b.classList.toggle('selected', b.dataset.value === notifValue));
+      }
+
+      await speakAsync('Say continue, or tap Continue, to move on.');
+      heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['continue', 'next', 'done'])) {
+        goToStep('tutorial');
+      }
+      return;
+    }
+
+    if (id === 'tutorial') {
+      await speakAsync(
+        "Here are the voice commands you can use. " +
+        "Describe what's around me, to get a fresh description of your surroundings. " +
+        "Read this, to read any visible text out loud. " +
+        "Navigate to, followed by a place, to get real walking directions. " +
+        "Emergency, or help me, to send an S O S to your emergency contact. " +
+        "Did they confirm, to check if your emergency contact responded."
+      );
+      if (stale()) return;
+      await speakAsync('Say finish, or tap Finish Setup, to complete setup.');
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 8000 }) : null;
+      if (stale()) return;
+      if (matchesAny(heard, ['finish', 'done', 'complete'])) {
+        finishSetup();
+      }
+      return;
+    }
   }
 
   // ---------- Step 0: Welcome ----------
@@ -464,12 +858,14 @@
   const profileHearingBtn = document.getElementById('profileHearingBtn');
   const profileNextBtn = document.getElementById('profileNextBtn');
 
-  profileVisualBtn.addEventListener('click', () => {
+  function selectProfileVisual() {
     state.profileType = 'visual';
     profileVisualBtn.classList.add('selected');
     profileHearingBtn.classList.remove('selected');
     profileNextBtn.disabled = false;
-  });
+  }
+
+  profileVisualBtn.addEventListener('click', selectProfileVisual);
   profileHearingBtn.addEventListener('click', () => {
     showToast("Coming soon! This experience isn't built yet — stay tuned.");
   });
@@ -485,7 +881,6 @@
     langEnBtn.classList.toggle('selected', lang === 'en');
     langSwBtn.classList.toggle('selected', lang === 'sw');
     languageNextBtn.disabled = false;
-    // Keep the personalization screen's language toggle in sync later.
     document.querySelectorAll('#langSegmented button').forEach(b => {
       b.classList.toggle('selected', b.dataset.value === lang);
     });
@@ -561,13 +956,16 @@
     savePersonBtn.disabled = !(capturedPhotos.length > 0 && personNameInput.value.trim() && selectedRelationship);
   }
 
-  capturePhotoBtn.addEventListener('click', () => {
+  // Extracted from the click handler so the voice flow can trigger the
+  // exact same capture logic. Returns true/false so voice can react if the
+  // camera wasn't actually ready yet.
+  function doCapturePhoto() {
     if (capturedPhotos.length >= MAX_PHOTOS) {
       showToast(`You've captured ${MAX_PHOTOS} photos — that's plenty.`);
-      return;
+      return true;
     }
     const w = faceVideo.videoWidth, h = faceVideo.videoHeight;
-    if (!w || !h) return;
+    if (!w || !h) return false;
     faceCanvas.width = w; faceCanvas.height = h;
     faceCanvas.getContext('2d').drawImage(faceVideo, 0, 0, w, h);
     const dataUrl = faceCanvas.toDataURL('image/jpeg', 0.8);
@@ -577,7 +975,10 @@
     img.src = dataUrl;
     photoStripEl.appendChild(img);
     updateSaveEnabled();
-  });
+    return true;
+  }
+
+  capturePhotoBtn.addEventListener('click', doCapturePhoto);
 
   personNameInput.addEventListener('input', updateSaveEnabled);
   relationshipRow.querySelectorAll('.relationship-btn').forEach(btn => {
@@ -589,15 +990,21 @@
     });
   });
 
-  savePersonBtn.addEventListener('click', () => {
+  // Extracted from the click handler so voice can reuse it, passing the
+  // transcribed name/relationship directly rather than reading form fields.
+  function doSavePerson(name, relationship) {
     state.familiarFaces.push({
-      name: personNameInput.value.trim(),
-      relationship: selectedRelationship,
+      name,
+      relationship,
       photos: capturedPhotos
     });
     stopFaceCamera();
     renderFaceList();
     resetAddPersonForm();
+  }
+
+  savePersonBtn.addEventListener('click', () => {
+    doSavePerson(personNameInput.value.trim(), selectedRelationship);
     goToStep('faces');
   });
 
@@ -632,6 +1039,28 @@
       pairDeviceBtn.disabled = false;
       pairDeviceBtn.textContent = 'Pair a Different Device';
     }, 2800);
+  }
+
+  // Async, narrated variant used by the voice flow — same fake scan/found/
+  // connected sequence and timings as runBluetoothMock(), but awaited so
+  // speech can be interleaved at each stage instead of firing silently.
+  async function runBluetoothPairingVoice() {
+    pairDeviceBtn.disabled = true;
+    btStatusText.textContent = 'Scanning for nearby devices…';
+    await speakAsync('Scanning for nearby devices.');
+    await sleep(1000);
+
+    btStatusText.textContent = `Found: ${MOCK_DEVICE_NAME}`;
+    await speakAsync(`Found ${MOCK_DEVICE_NAME}.`);
+    await sleep(800);
+
+    btIcon.textContent = '✅';
+    btStatusText.textContent = `Connected to ${MOCK_DEVICE_NAME}`;
+    state.bluetoothConnected = true;
+    state.bluetoothDeviceName = MOCK_DEVICE_NAME;
+    pairDeviceBtn.disabled = false;
+    pairDeviceBtn.textContent = 'Pair a Different Device';
+    await speakAsync(`Connected to ${MOCK_DEVICE_NAME}.`);
   }
 
   pairDeviceBtn.addEventListener('click', runBluetoothMock);
@@ -696,7 +1125,7 @@
   personalizeNextBtn.addEventListener('click', () => goToStep('tutorial'));
 
   // ---------- Step 6: Finish ----------
-  document.getElementById('finishBtn').addEventListener('click', () => {
+  function finishSetup() {
     localStorage.setItem('onboardingComplete', 'true');
     localStorage.setItem('userProfile', JSON.stringify({ type: state.profileType || 'visual' }));
     localStorage.setItem('preferredLanguage', state.language || 'en');
@@ -709,9 +1138,15 @@
     localStorage.setItem('notificationFrequency', state.notificationFrequency);
 
     window.location.href = '/index.html';
-  });
+  }
+  document.getElementById('finishBtn').addEventListener('click', finishSetup);
 
   renderFaceList();
+
+  // Kick off voice narration/listening for the first screen. The step is
+  // already visually active via the .active class in the HTML; this just
+  // starts the voice side of it to match.
+  goToStep('welcome');
 </script>
 </body>
 </html>
