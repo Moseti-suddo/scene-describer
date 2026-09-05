@@ -133,6 +133,12 @@ export default async function handler(req, res) {
       return {
         stepNumber: i + 1,
         instruction: (step.maneuver && step.maneuver.instruction) || '',
+        // Structured maneuver info (e.g. type: 'turn', modifier: 'left'),
+        // exposed alongside the full instruction text so the frontend can
+        // build short spoken phrases ("Turn left") instead of relying on
+        // Mapbox's longer sentence ("Turn left onto Kenyatta Ave").
+        maneuverType: (step.maneuver && step.maneuver.type) || null,
+        maneuverModifier: (step.maneuver && step.maneuver.modifier) || null,
         distanceMeters: step.distance,
         distanceText: metersToWalkingText(step.distance),
         lat: loc ? loc[1] : null,

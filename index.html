@@ -1960,9 +1960,14 @@
     return 2 * R * Math.asin(Math.sqrt(a));
   }
 
+  const SAME_PLACE_RADIUS_METERS = 50;
+
+  function findNearbySavedPlace(lat, lng) {
+    return savedPlaces.find(p => distanceMeters(p.lat, p.lng, lat, lng) < SAME_PLACE_RADIUS_METERS) || null;
+  }
+
   function recordPlaceVisit(name, lat, lng) {
-    const SAME_PLACE_RADIUS_METERS = 50;
-    const existing = savedPlaces.find(p => distanceMeters(p.lat, p.lng, lat, lng) < SAME_PLACE_RADIUS_METERS);
+    const existing = findNearbySavedPlace(lat, lng);
     if (existing) {
       existing.visitCount += 1;
       existing.lastUsedAt = Date.now();
@@ -2213,38 +2218,101 @@
 
     const routeIntroByMode = {
       independent: `${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText}.`,
-      guided: `Route to ${activeRoute.destinationName}. Total distance ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking. I'll guide you there, one step at a time.`,
-      support: `Okay, we're heading to ${activeRoute.destinationName}. It's about ${activeRoute.totalDistanceText}, roughly ${activeRoute.totalDurationText} walking. We'll take it one step at a time — no rush.`
+      guided: `Heading to ${activeRoute.destinationName}. Total distance ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking. I'll guide you one step at a time — ask me any time if you want me to check what's ahead.`,
+      support: `Okay, we're heading to ${activeRoute.destinationName}. It's about ${activeRoute.totalDistanceText}, roughly ${activeRoute.totalDurationText} walking. We'll take it one step at a time, and you can ask me to check what's ahead whenever you like — no rush.`
     };
     await speakAsync(routeIntroByMode[assistanceMode] || routeIntroByMode.guided);
     await speakCurrentStep();
   }
 
+  // ---------- Step-count phrasing (O&M-style approximation) ----------
+  // Not a measured value — an assumed average adult stride, used only to
+  // give a rough, hedged sense of distance in steps alongside the actual
+  // meters. Deliberately phrased as "roughly"/"about" so it never reads as
+  // more precise than it is.
+  const AVERAGE_STRIDE_METERS = 0.75;
+  // Beyond this, a step count stops being a useful mental unit (nobody
+  // tracks "about 1,600 steps" while walking) — just speak the distance.
+  const STEP_COUNT_MAX_METERS = 300;
+
+  function estimatedStepCount(distanceMeters) {
+    return Math.max(1, Math.round(distanceMeters / AVERAGE_STRIDE_METERS));
+  }
+
+  function hedgedDistancePhrase(distanceMeters, distanceText) {
+    if (distanceMeters == null) return distanceText || '';
+    if (distanceMeters < 2) return 'just a step or two';
+    if (distanceMeters > STEP_COUNT_MAX_METERS) return `roughly ${distanceText}`;
+    const steps = estimatedStepCount(distanceMeters);
+    return `roughly ${distanceText}, about ${steps} of your steps`;
+  }
+
+  // Turns Mapbox's structured maneuver (type/modifier) into a short spoken
+  // phrase, e.g. "Turn left". Returns null for "just keep walking" segments
+  // (continue/depart/merge/new-name/arrive), which speakCurrentStep phrases
+  // as a plain forward-walking instruction instead.
+  function shortManeuverPhrase(step) {
+    const type = step.maneuverType;
+    const modifier = step.maneuverModifier;
+    if (!type) return null;
+    if (['turn', 'end of road', 'fork', 'ramp', 'off ramp', 'on ramp'].includes(type)) {
+      return modifier ? `Turn ${modifier.replace(/_/g, ' ')}` : 'Turn';
+    }
+    if (type === 'roundabout' || type === 'rotary') return 'Go through the roundabout';
+    return null; // depart, continue, new name, merge, arrive, etc.
+  }
+
+
   async function speakCurrentStep() {
     if (!activeRoute) return;
     const step = activeRoute.steps[activeRoute.currentStepIndex];
-    navStepTextEl.textContent = `Step ${step.stepNumber}: ${step.instruction} (${step.distanceText})`;
+    const distancePhrase = hedgedDistancePhrase(step.distanceMeters, step.distanceText);
+    const maneuverPhrase = shortManeuverPhrase(step);
+
+    navStepTextEl.textContent = maneuverPhrase
+      ? `Step ${step.stepNumber}: ${maneuverPhrase}. ${step.distanceText}.`
+      : `Step ${step.stepNumber}: Walk forward. ${step.distanceText}.`;
 
     if (assistanceMode === 'independent') {
-      await speakAsync(`${step.instruction}. ${step.distanceText}.`);
+      const spoken = maneuverPhrase
+        ? `${maneuverPhrase} in ${distancePhrase}.`
+        : `Forward, ${distancePhrase}.`;
+      await speakAsync(spoken);
       return;
     }
 
     if (assistanceMode === 'support') {
-      const chunks = step.instruction
-        .split(/(?<=[.;])\s+|\s+and\s+(?=\w)/i)
-        .map(c => c.trim())
-        .filter(Boolean);
-      for (let i = 0; i < chunks.length; i++) {
-        await speakAsync(chunks[i]);
-        if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 400));
+      if (maneuverPhrase) {
+        await speakAsync(`Coming up: ${maneuverPhrase.toLowerCase()}.`);
+        await new Promise(r => setTimeout(r, 400));
+        await speakAsync(`That's ${distancePhrase} ahead. Take your time — say next, or tap Next, whenever you're ready.`);
+      } else {
+        await speakAsync('No turns for this stretch — just keep walking forward.');
+        await new Promise(r => setTimeout(r, 400));
+        await speakAsync(`That's ${distancePhrase}. Take your time — say next, or tap Next, whenever you're ready.`);
       }
-      await speakAsync(`That's about ${step.distanceText}. Take your time — say next, or tap Next, whenever you're ready.`);
       return;
     }
 
-    await speakAsync(`${step.instruction}. That's about ${step.distanceText}.`);
+    // guided (default)
+    if (maneuverPhrase) {
+      await speakAsync(`You're nearing the next turn — ${distancePhrase}. Then ${maneuverPhrase.toLowerCase()}.`);
+    } else {
+      await speakAsync(`No turns for this stretch. Walk forward, ${distancePhrase}.`);
+    }
   }
+
+  // Fresh-capture description used only to help confirm arrival at a new
+  // place — reuses the same describe pipeline as scene description and
+  // hazard checks (real Bedrock call, not a canned response).
+  async function describeArrivalScene() {
+    activeImageBase64 = null;
+    conversationHistory = [];
+    return askBackend({ question: 'Briefly describe what is immediately around me right now, to help me confirm I am at the right place.' });
+  }
+
+  const ARRIVAL_YES_KEYWORDS = ['yes', 'yeah', 'yup', 'correct', "that's right", 'thats right', 'right place'];
+  const ARRIVAL_NO_KEYWORDS = ['no', 'not right', 'wrong place', 'not it', "that's not", 'thats not'];
 
   async function advanceToNextStep() {
     if (!activeRoute) {
@@ -2254,11 +2322,51 @@
     activeRoute.currentStepIndex += 1;
 
     if (activeRoute.currentStepIndex >= activeRoute.steps.length) {
-      await speakAsync(`You've arrived at ${activeRoute.destinationName}.`);
-      recordPlaceVisit(activeRoute.destinationName, activeRoute.destLat, activeRoute.destLng);
+      const destName = activeRoute.destinationName;
+      const destLat = activeRoute.destLat;
+      const destLng = activeRoute.destLng;
       navProgressCard.style.display = 'none';
       routeMapCard.style.display = 'none';
       activeRoute = null;
+
+      const knownPlace = findNearbySavedPlace(destLat, destLng);
+
+      if (knownPlace) {
+        // Already visited before — no need to re-confirm every time.
+        await speakAsync(`You should be at ${destName} now.`);
+        recordPlaceVisit(destName, destLat, destLng);
+        renderPlacesScreen();
+        return;
+      }
+
+      // New place: confirm before saving, so a wrong or approximate GPS
+      // fix doesn't silently get remembered as "the library" or similar.
+      await speakAsync(`You should be near ${destName} now. Let me check what's around, to help confirm.`);
+
+      let description = null;
+      try {
+        description = await describeArrivalScene();
+      } catch (err) {
+        description = null;
+      }
+      if (description) {
+        await speakAsync(description);
+      }
+      await speakAsync('Does that sound like the right place? Say yes to save it, or no if this is not it.');
+
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      const lower = (heard || '').toLowerCase();
+      const saidYes = ARRIVAL_YES_KEYWORDS.some(k => lower.includes(k));
+      const saidNo = ARRIVAL_NO_KEYWORDS.some(k => lower.includes(k));
+
+      if (saidYes) {
+        recordPlaceVisit(destName, destLat, destLng);
+        await speakAsync(`Saved ${destName} for next time.`);
+      } else if (saidNo) {
+        await speakAsync("Okay, I won't save this as that place. You can try navigating again if the route wasn't right.");
+      } else {
+        await speakAsync("I didn't catch a clear answer, so I won't save this place yet. You can add it later from the Places tab.");
+      }
       renderPlacesScreen();
       return;
     }
