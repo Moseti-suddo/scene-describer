@@ -903,6 +903,14 @@
     myPeople = JSON.parse(localStorage.getItem('myPeople') || '[]');
   } catch (e) { myPeople = []; }
 
+  // ---------- Familiar Faces state (registered during onboarding) ----------
+  // Used for the honest face-recognition stub below — this is the same
+  // list onboarding.html writes to (name, relationship, up to 3 photos).
+  let familiarFaces = [];
+  try {
+    familiarFaces = JSON.parse(localStorage.getItem('familiarFaces') || '[]');
+  } catch (e) { familiarFaces = []; }
+
   // ---------- Navigation / Places state ----------
   let savedPlaces = [];
   try {
@@ -990,7 +998,24 @@
   const DESCRIBE_KEYWORDS = [
     'describe', 'what is around', "what's around", 'look around',
     'new picture', 'take a picture', 'whats here', "what's here",
-    'start over', 'new scene', 'look again'
+    'start over', 'new scene', 'look again',
+    'what is in front of me', "what's in front of me",
+    'what is on the table', "what's on the table",
+    'are there people', 'is anyone nearby', 'what is happening around',
+    "what's happening around"
+  ];
+  // Direct safety/hazard questions. Handled distinctly from DESCRIBE_KEYWORDS
+  // because the backend now answers these as a direct yes/no or hazard
+  // confirmation first, rather than a general scene description — and
+  // because these always warrant a *fresh* frame (the moment matters,
+  // not what was last described).
+  const HAZARD_KEYWORDS = [
+    'is it safe', 'safe to continue', 'safe to walk', 'safe to proceed',
+    'anything i should be careful', 'anything to be careful',
+    'anything to watch out for', 'anything i should watch',
+    'are there stairs', 'any stairs', 'watch for stairs',
+    'any obstacles', 'anything in my way', 'anything in the way',
+    'any hazards', 'is there anything dangerous'
   ];
   const EMERGENCY_KEYWORDS = ['sos', 'emergency', 'help me', 'send help', 'i need help'];
   const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help'];
@@ -998,6 +1023,17 @@
   const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed'];
   const CONTACT_STATUS_KEYWORDS = ['is my contact confirmed', 'check my contact', 'contact status', 'is my contact set up'];
   const TALK_TO_SOMEONE_KEYWORDS = ['someone to talk to', 'talk to someone', "don't want to be alone", 'dont want to be alone', 'i need to talk'];
+  // "who's here" vs "what's here": kept as a visually distinct list (not
+  // merged into DESCRIBE_KEYWORDS) since they trigger genuinely different
+  // features — face recognition vs. scene description — even though a
+  // mis-transcription could occasionally blur the two.
+  const FACE_RECOGNITION_KEYWORDS = [
+    'who is here', "who's here", 'whos here',
+    'who is around', "who's around", 'whos around',
+    'is anyone here', 'is anyone around',
+    'recognize this person', 'recognize them',
+    'who is that', "who's that", 'who is in front of me'
+  ];
   const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to'];
   const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue'];
 
@@ -1230,6 +1266,52 @@
 
     await speakAsync(`Calling ${match.name}.`);
     window.location.href = `tel:${match.phone}`;
+  }
+
+  // ---------- Familiar Faces (honest recognition stub) ----------
+  // There is no computer-vision/face-matching backend connected yet — see
+  // api/recognize-faces.js. This calls that endpoint, which always reports
+  // "not configured" today, and speaks that honestly rather than guessing.
+  // Wiring stays in place so swapping in a real matching service later is a
+  // backend-only change.
+  async function handleFaceRecognitionIntent() {
+    setState('thinking');
+    setStatus('Checking for familiar faces…');
+
+    const imageBase64 = captureFrameBase64();
+
+    try {
+      const res = await fetch('/api/recognize-faces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: imageBase64,
+          registeredFaces: familiarFaces.map(f => ({ name: f.name, relationship: f.relationship }))
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Face recognition check failed');
+
+      if (data.status === 'not_configured') {
+        const countNote = familiarFaces.length
+          ? ` You do have ${familiarFaces.length} ${familiarFaces.length === 1 ? 'person' : 'people'} saved, for when this is ready.`
+          : '';
+        await speakAsync('Face recognition is not set up yet, so I cannot tell you who is nearby.' + countNote);
+        return;
+      }
+
+      if (data.recognized && data.recognized.length) {
+        const names = data.recognized
+          .map(p => (p.relationship ? `${p.name}, your ${p.relationship}` : p.name))
+          .join(', and ');
+        await speakAsync(`I can see ${names} nearby.`);
+      } else {
+        await speakAsync("I don't recognize anyone in front of you right now.");
+      }
+    } catch (err) {
+      setError('Face recognition check failed: ' + (err && err.message ? err.message : err));
+      await speakAsync('Something went wrong checking for familiar faces.');
+    }
   }
 
   // ---------- Settings screen ----------
@@ -1657,6 +1739,12 @@
     if (!text) return false;
     const lower = text.toLowerCase();
     return DESCRIBE_KEYWORDS.some(k => lower.includes(k));
+  }
+
+  function looksLikeHazardCheckRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return HAZARD_KEYWORDS.some(k => lower.includes(k));
   }
 
   // ---------- Emergency contact setup (voice-driven) ----------
@@ -2226,6 +2314,11 @@
         resetToIdle();
         return;
       }
+      if (FACE_RECOGNITION_KEYWORDS.some(k => lower.includes(k))) {
+        await handleFaceRecognitionIntent();
+        resetToIdle();
+        return;
+      }
       if (CALL_KEYWORDS.some(k => lower.includes(k))) {
         triggerCall();
         resetToIdle();
@@ -2269,14 +2362,18 @@
       }
     }
 
-    const wantsFreshScene = !speechText || looksLikeFreshSceneRequest(speechText);
+    const isHazardCheck = looksLikeHazardCheckRequest(speechText);
+    const wantsFreshScene = !speechText || looksLikeFreshSceneRequest(speechText) || isHazardCheck;
     if (wantsFreshScene) {
       activeImageBase64 = null;
       conversationHistory = [];
     }
 
     try {
-      const answer = await askBackend({ question: wantsFreshScene ? '' : speechText });
+      const questionForBackend = isHazardCheck
+        ? speechText
+        : (wantsFreshScene ? '' : speechText);
+      const answer = await askBackend({ question: questionForBackend });
       setStatus('');
       setError('');
 
