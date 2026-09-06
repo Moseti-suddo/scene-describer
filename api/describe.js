@@ -65,9 +65,34 @@ const MODE_INSTRUCTIONS = {
     'but keep it light and infrequent rather than in every response.'
 };
 
-function buildSystemPrompt(mode) {
+// Supported spoken-language codes. Kept as an explicit list (rather than
+// accepting anything the client sends) so an unrecognized or missing value
+// falls back safely to English instead of silently mis-instructing the model.
+const SUPPORTED_LANGUAGES = {
+  en: 'English',
+  sw: 'Kiswahili (Swahili)'
+};
+
+function buildSystemPrompt(mode, language) {
   const modeInstruction = MODE_INSTRUCTIONS[mode] || MODE_INSTRUCTIONS.guided;
-  return `${BASE_SYSTEM_PROMPT}\n\n${modeInstruction}`;
+  const languageName = SUPPORTED_LANGUAGES[language] || null;
+
+  if (!languageName || language === 'en') {
+    return `${BASE_SYSTEM_PROMPT}\n\n${modeInstruction}`;
+  }
+
+  // Explicitly tie the language switch to the mode instruction above, rather
+  // than bolting on a generic "respond in X" — the point is that the same
+  // verbosity/tone choices (terse for Independent, warmer for Support, etc.)
+  // still apply, just expressed naturally in the selected language rather
+  // than translated word-for-word from English.
+  const languageInstruction =
+    `\n\nThe user has selected ${languageName} as their preferred language. Respond entirely in natural, ` +
+    `conversational ${languageName} — for scene descriptions, text reading, hazard/safety answers, and every other ` +
+    `kind of response. Keep following the mode instruction above exactly as written; just express that same ` +
+    `verbosity and tone naturally in ${languageName} rather than in English.`;
+
+  return `${BASE_SYSTEM_PROMPT}\n\n${modeInstruction}${languageInstruction}`;
 }
 
 const DEFAULT_QUESTION_TEXT = 'Describe what is in front of me.';
@@ -91,7 +116,10 @@ export default async function handler(req, res) {
     // mode: the user's assistance-mode preference ('independent' | 'guided'
     //       | 'support'), read client-side from localStorage. Defaults to
     //       'guided' if missing or unrecognized.
-    const { image, history, question, mode } = req.body;
+    // language: the user's preferred spoken-language code ('en' | 'sw'),
+    //           read client-side from localStorage. Defaults to English if
+    //           missing or unrecognized — see SUPPORTED_LANGUAGES above.
+    const { image, history, question, mode, language } = req.body;
 
     if (!image) {
       return res.status(400).json({ error: 'Missing image data' });
@@ -160,7 +188,7 @@ export default async function handler(req, res) {
 
     const command = new ConverseCommand({
       modelId: MODEL_ID,
-      system: [{ text: buildSystemPrompt(mode) }],
+      system: [{ text: buildSystemPrompt(mode, language) }],
       messages,
       inferenceConfig: {
         maxTokens: 700,

@@ -867,6 +867,274 @@
   let preferredLanguage = localStorage.getItem('preferredLanguage') || 'en';
   if (!['en', 'sw'].includes(preferredLanguage)) preferredLanguage = 'en';
 
+  // ---------- Spoken-copy translations ----------
+  // Covers the app's own spoken lines (announcements, confirmations,
+  // fallbacks) — NOT the AI's own responses, which get their language from
+  // the `language` field sent to /api/describe (see askBackend). Visible
+  // on-screen text (buttons, labels, Settings copy) is out of scope for
+  // this pass and stays English-only for now.
+  //
+  // Each entry is either a plain string or a function returning a string,
+  // for lines that interpolate a name/count/label. Structured as a flat
+  // { en, sw } pair per key (rather than one object per language) so a
+  // missing translation falls back to English instead of speaking undefined.
+  // Adding a third language later means adding one more key per entry, not
+  // restructuring this.
+  const T = {
+    voiceControlActive: {
+      en: 'Voice control active. Double-tap anywhere on the screen to speak. Long-press anywhere, or say emergency, to send an S O S alert.',
+      sw: 'Udhibiti wa sauti umewashwa. Gusa mara mbili popote kwenye skrini ili kuongea. Bonyeza na kushikilia popote, au sema dharura, ili kutuma tahadhari ya dharura.'
+    },
+    noContactYetLongPress: {
+      en: 'No emergency contact is set yet. Long-press anywhere to add one.',
+      sw: 'Bado hujaweka mtu wa dharura. Bonyeza na kushikilia popote ili kumweka.'
+    },
+    modeSwitched: {
+      en: (label) => `Switched to ${label} mode.`,
+      sw: (label) => `Umebadilisha hadi hali ya ${label}.`
+    },
+    faceRecognitionNotConfigured: {
+      en: (countNote) => `Face recognition is not set up yet, so I cannot tell you who is nearby.${countNote}`,
+      sw: (countNote) => `Utambuzi wa nyuso bado haujawekwa, kwa hivyo siwezi kukwambia ni nani aliye karibu.${countNote}`
+    },
+    faceRecognitionCountNote: {
+      en: (n) => ` You do have ${n} ${n === 1 ? 'person' : 'people'} saved, for when this is ready.`,
+      sw: (n) => ` Una ${n} ${n === 1 ? 'mtu' : 'watu'} waliohifadhiwa, kwa wakati hii itakapokuwa tayari.`
+    },
+    faceRecognitionRecognized: {
+      en: (names) => `I can see ${names} nearby.`,
+      sw: (names) => `Ninaona ${names} karibu.`
+    },
+    faceRecognitionNoneRecognized: {
+      en: "I don't recognize anyone in front of you right now.",
+      sw: 'Sitambui mtu yeyote mbele yako kwa sasa.'
+    },
+    faceRecognitionFailed: {
+      en: 'Something went wrong checking for familiar faces.',
+      sw: 'Hitilafu imetokea wakati wa kuangalia nyuso zinazojulikana.'
+    },
+    talkToSomeoneNoPeople: {
+      en: 'You have not added anyone to My People yet. You can add someone from the SOS tab.',
+      sw: 'Bado hujamweka mtu yeyote kwenye Watu Wangu. Unaweza kumweka mtu kutoka kwenye kichupo cha SOS.'
+    },
+    talkToSomeoneReachList: {
+      en: (names) => `You can reach: ${names}. Who would you like to call?`,
+      sw: (names) => `Unaweza kuwasiliana na: ${names}. Ungependa kupigia nani?`
+    },
+    talkToSomeoneDidntCatch: {
+      en: "I didn't catch that. You can also tap a name under My People in the SOS tab.",
+      sw: 'Sikuelewa hilo. Unaweza pia kugusa jina chini ya Watu Wangu kwenye kichupo cha SOS.'
+    },
+    talkToSomeoneNoMatch: {
+      en: "I couldn't match that to someone in your list. You can tap a name under My People in the SOS tab.",
+      sw: 'Sikuweza kulingana hilo na mtu kwenye orodha yako. Unaweza kugusa jina chini ya Watu Wangu kwenye kichupo cha SOS.'
+    },
+    talkToSomeoneCalling: {
+      en: (name) => `Calling ${name}.`,
+      sw: (name) => `Ninampigia ${name}.`
+    },
+    noContactSetLongPress: {
+      en: 'No emergency contact is set. Long-press anywhere to set one now.',
+      sw: 'Hakuna mtu wa dharura aliyewekwa. Bonyeza na kushikilia popote ili kumweka sasa.'
+    },
+    preparingEmergencyAlert: {
+      en: 'Preparing your emergency alert.',
+      sw: 'Ninaandaa tahadhari yako ya dharura.'
+    },
+    emergencyMessageReady: {
+      en: (pushNote) => `Emergency message ready. Please send it now.${pushNote} Say did they confirm, any time, to check for a response.`,
+      sw: (pushNote) => `Ujumbe wa dharura uko tayari. Tafadhali utume sasa.${pushNote} Sema wamethibitisha, wakati wowote, kuangalia jibu.`
+    },
+    emergencyPushNote: {
+      en: ' A push notification was also sent to them.',
+      sw: ' Arifa pia ilitumwa kwao.'
+    },
+    callingContact: {
+      en: 'Calling your emergency contact.',
+      sw: 'Ninampigia mtu wako wa dharura.'
+    },
+    openingWhatsapp: {
+      en: 'Opening WhatsApp.',
+      sw: 'Ninafungua WhatsApp.'
+    },
+    sosConfirmedYes: {
+      en: 'Yes! Your emergency contact confirmed they are on the way.',
+      sw: 'Ndiyo! Mtu wako wa dharura amethibitisha anakuja.'
+    },
+    sosConfirmedNo: {
+      en: 'Not yet. They have not confirmed.',
+      sw: 'Bado. Hajathibitisha.'
+    },
+    couldNotCheckNow: {
+      en: 'I could not check right now. Try again in a moment.',
+      sw: 'Sikuweza kuangalia sasa hivi. Jaribu tena baada ya muda mfupi.'
+    },
+    noAlertSentYet: {
+      en: 'No emergency alert has been sent yet.',
+      sw: 'Hakuna tahadhari ya dharura iliyotumwa bado.'
+    },
+    contactConfirmedYes: {
+      en: 'Yes, your emergency contact has completed setup and is ready.',
+      sw: 'Ndiyo, mtu wako wa dharura amemaliza usanidi na yuko tayari.'
+    },
+    contactConfirmedNo: {
+      en: 'Not yet. They still need to tap the link you sent them.',
+      sw: 'Bado. Bado wanahitaji kugusa kiungo ulichowatumia.'
+    },
+    noContactYetPlain: {
+      en: 'No emergency contact is set yet.',
+      sw: 'Bado hakuna mtu wa dharura aliyewekwa.'
+    },
+    askContactPhoneNumber: {
+      en: "Please say your emergency contact's phone number.",
+      sw: 'Tafadhali sema nambari ya simu ya mtu wako wa dharura.'
+    },
+    didntCatchPhoneNumber: {
+      en: "I didn't catch a valid phone number. Long-press anywhere to try again.",
+      sw: 'Sikupata nambari sahihi ya simu. Bonyeza na kushikilia popote kujaribu tena.'
+    },
+    heardPhoneNumberConfirm: {
+      en: (spaced) => `I heard ${spaced}. Long-press to confirm, or double-tap to try again.`,
+      sw: (spaced) => `Nimesikia ${spaced}. Bonyeza na kushikilia kuthibitisha, au gusa mara mbili kujaribu tena.`
+    },
+    contactSavedOpeningInvite: {
+      en: 'Emergency contact saved. Opening a message to invite them now.',
+      sw: 'Mtu wa dharura amehifadhiwa. Ninafungua ujumbe wa kumwalika sasa.'
+    },
+    gettingDirectionsTo: {
+      en: (dest) => `Getting directions to ${dest}.`,
+      sw: (dest) => `Ninatafuta maelekezo ya kwenda ${dest}.`
+    },
+    noConnectionUsingCached: {
+      en: 'No connection right now. Using a saved route to this destination from earlier.',
+      sw: 'Hakuna muunganisho sasa hivi. Ninatumia njia iliyohifadhiwa kwa mahali hapa kutoka awali.'
+    },
+    routeIntroIndependent: {
+      en: (dist, dur) => `${dist}, about ${dur}.`,
+      sw: (dist, dur) => `${dist}, karibu ${dur}.`
+    },
+    routeIntroGuided: {
+      en: (dest, dist, dur) => `Heading to ${dest}. Total distance ${dist}, about ${dur} walking. I'll guide you one step at a time — ask me any time if you want me to check what's ahead.`,
+      sw: (dest, dist, dur) => `Tunaelekea ${dest}. Umbali wote ${dist}, karibu ${dur} kwa kutembea. Nitakuongoza hatua kwa hatua — niulize wakati wowote ukitaka nikague kilicho mbele.`
+    },
+    routeIntroSupport: {
+      en: (dest, dist, dur) => `Okay, we're heading to ${dest}. It's about ${dist}, roughly ${dur} walking. We'll take it one step at a time, and you can ask me to check what's ahead whenever you like — no rush.`,
+      sw: (dest, dist, dur) => `Sawa, tunaelekea ${dest}. Ni karibu ${dist}, takribani ${dur} kwa kutembea. Tutaenda hatua kwa hatua, na unaweza kuniuliza nikague kilicho mbele wakati wowote — hakuna haraka.`
+    },
+    noRouteActive: {
+      en: 'No route is active right now.',
+      sw: 'Hakuna njia inayoendelea sasa hivi.'
+    },
+    whereDoYouWantToGo: {
+      en: 'Where do you want to go?',
+      sw: 'Unataka kwenda wapi?'
+    },
+    navDidntCatchDestination: {
+      en: "I didn't catch that. Try again from the Places tab.",
+      sw: 'Sikuelewa hilo. Jaribu tena kutoka kwenye kichupo cha Sehemu.'
+    },
+    navigationFailedNoLocationNoCache: {
+      en: 'I could not get your current location, and no saved route to this destination is available.',
+      sw: 'Sikuweza kupata mahali ulipo, na hakuna njia iliyohifadhiwa kwa mahali hapa.'
+    },
+    navigationFailedErrorNoCache: {
+      en: 'Something went wrong getting directions, and no saved route to this destination is available.',
+      sw: 'Hitilafu imetokea kupata maelekezo, na hakuna njia iliyohifadhiwa kwa mahali hapa.'
+    },
+    arrivedKnownPlace: {
+      en: (dest) => `You should be at ${dest} now.`,
+      sw: (dest) => `Unapaswa kuwa ${dest} sasa.`
+    },
+    arrivedNewPlaceChecking: {
+      en: (dest) => `You should be near ${dest} now. Let me check what's around, to help confirm.`,
+      sw: (dest) => `Unapaswa kuwa karibu na ${dest} sasa. Wacha nikague kilicho karibu, kusaidia kuthibitisha.`
+    },
+    arrivedConfirmQuestion: {
+      en: 'Does that sound like the right place? Say yes to save it, or no if this is not it.',
+      sw: 'Je, hiyo inaonekana kama mahali sahihi? Sema ndiyo kuhifadhi, au hapana kama sio hapo.'
+    },
+    arrivedSaved: {
+      en: (dest) => `Saved ${dest} for next time.`,
+      sw: (dest) => `Nimehifadhi ${dest} kwa wakati mwingine.`
+    },
+    arrivedNotSaved: {
+      en: "Okay, I won't save this as that place. You can try navigating again if the route wasn't right.",
+      sw: 'Sawa, sitohifadhi hii kama mahali hapo. Unaweza kujaribu tena kama njia haikuwa sahihi.'
+    },
+    arrivedUnclear: {
+      en: "I didn't catch a clear answer, so I won't save this place yet. You can add it later from the Places tab.",
+      sw: 'Sikupata jibu wazi, kwa hivyo sitohifadhi mahali hapa bado. Unaweza kuongeza baadaye kutoka kwenye kichupo cha Sehemu.'
+    },
+    stepTurn: {
+      en: (maneuver, dist) => `${maneuver} in ${dist}.`,
+      sw: (maneuver, dist) => `${maneuver} baada ya ${dist}.`
+    },
+    stepForward: {
+      en: (dist) => `Forward, ${dist}.`,
+      sw: (dist) => `Mbele, ${dist}.`
+    },
+    stepSupportComingUp: {
+      en: (maneuver) => `Coming up: ${maneuver}.`,
+      sw: (maneuver) => `Inakuja: ${maneuver}.`
+    },
+    stepSupportDistanceTakeYourTime: {
+      en: (dist) => `That's ${dist} ahead. Take your time — say next, or tap Next, whenever you're ready.`,
+      sw: (dist) => `Hiyo ni ${dist} mbele. Chukua muda wako — sema inayofuata, au gusa Inayofuata, ukiwa tayari.`
+    },
+    stepSupportNoTurns: {
+      en: 'No turns for this stretch — just keep walking forward.',
+      sw: 'Hakuna kupinda kwa sehemu hii — endelea kutembea mbele tu.'
+    },
+    stepGuidedTurn: {
+      en: (dist, maneuver) => `You're nearing the next turn — ${dist}. Then ${maneuver}.`,
+      sw: (dist, maneuver) => `Unakaribia kupinda kunakofuata — ${dist}. Kisha ${maneuver}.`
+    },
+    stepGuidedNoTurns: {
+      en: (dist) => `No turns for this stretch. Walk forward, ${dist}.`,
+      sw: (dist) => `Hakuna kupinda kwa sehemu hii. Tembea mbele, ${dist}.`
+    },
+    ttsUnavailableFallback: {
+      en: 'Swahili voice service is unavailable right now. Continuing with the built-in device voice.',
+      sw: 'Huduma ya sauti ya Kiswahili haipatikani sasa hivi. Ninaendelea na sauti ya kifaa iliyojengwa ndani.'
+    },
+    maneuverTurn: {
+      en: (dir) => `Turn ${dir}`,
+      sw: (dir) => `Geuka ${dir}`
+    },
+    maneuverTurnPlain: {
+      en: 'Turn',
+      sw: 'Geuka'
+    },
+    maneuverRoundabout: {
+      en: 'Go through the roundabout',
+      sw: 'Pita kwenye kipilefti'
+    }
+  };
+
+  function t(key, ...args) {
+    const entry = T[key];
+    if (!entry) return '';
+    const lang = (preferredLanguage === 'sw') ? 'sw' : 'en';
+    const value = (entry[lang] !== undefined) ? entry[lang] : entry.en;
+    return typeof value === 'function' ? value(...args) : value;
+  }
+
+  // Mode labels for SPOKEN confirmations only (e.g. "Switched to X mode").
+  // Deliberately separate from MODE_INFO's `.label` below, which drives
+  // visible Settings text and stays English-only in this pass — keeping
+  // them separate means translating speech doesn't accidentally change
+  // on-screen text neither of us has reviewed for that yet.
+  const SPOKEN_MODE_LABEL = {
+    independent: { en: 'Independent', sw: 'Kujitegemea' },
+    guided: { en: 'Guided', sw: 'Kuongozwa' },
+    support: { en: 'Support', sw: 'Usaidizi' }
+  };
+  function spokenModeLabel(mode) {
+    const entry = SPOKEN_MODE_LABEL[mode] || SPOKEN_MODE_LABEL.guided;
+    return (preferredLanguage === 'sw') ? entry.sw : entry.en;
+  }
+
+
   let currentStream = null;
   let facingMode = 'environment';
   let hasAnnouncedInstructions = false;
@@ -974,10 +1242,14 @@
     localStorage.setItem('assistanceMode', mode);
   }
 
+  // Each list below mixes English and Swahili phrases in one flat array.
+  // Whisper transcribes whichever language was actually spoken (see
+  // transcribe.js — it deliberately doesn't force a language), so matching
+  // needs both sets of phrases rather than assuming English.
   const MODE_COMMANDS = [
-    { keywords: ['independent mode', 'independence mode'], mode: 'independent', label: 'Independent' },
-    { keywords: ['guided mode'], mode: 'guided', label: 'Guided' },
-    { keywords: ['support mode', 'slow down', 'slower please', "i'm overwhelmed", 'im overwhelmed'], mode: 'support', label: 'Support' }
+    { keywords: ['independent mode', 'independence mode', 'hali ya kujitegemea'], mode: 'independent', label: 'Independent' },
+    { keywords: ['guided mode', 'hali ya kuongozwa'], mode: 'guided', label: 'Guided' },
+    { keywords: ['support mode', 'slow down', 'slower please', "i'm overwhelmed", 'im overwhelmed', 'hali ya usaidizi', 'punguza mwendo', 'nimezidiwa'], mode: 'support', label: 'Support' }
   ];
 
   const MODE_INFO = {
@@ -1002,7 +1274,10 @@
     'what is in front of me', "what's in front of me",
     'what is on the table', "what's on the table",
     'are there people', 'is anyone nearby', 'what is happening around',
-    "what's happening around"
+    "what's happening around",
+    'eleza', 'elezea nini kilicho karibu', 'kuna nini karibu',
+    'angalia karibu', 'picha mpya', 'piga picha', 'anza upya',
+    'kuna nini mbele yangu', 'nini kiko mbele yangu'
   ];
   // Direct safety/hazard questions. Handled distinctly from DESCRIBE_KEYWORDS
   // because the backend now answers these as a direct yes/no or hazard
@@ -1015,14 +1290,16 @@
     'anything to watch out for', 'anything i should watch',
     'are there stairs', 'any stairs', 'watch for stairs',
     'any obstacles', 'anything in my way', 'anything in the way',
-    'any hazards', 'is there anything dangerous'
+    'any hazards', 'is there anything dangerous',
+    'je ni salama', 'ni salama kuendelea', 'kuna ngazi',
+    'kuna kitu cha kuwa makini nacho', 'kuna vizuizi'
   ];
-  const EMERGENCY_KEYWORDS = ['sos', 'emergency', 'help me', 'send help', 'i need help'];
-  const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help'];
-  const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact'];
-  const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed'];
-  const CONTACT_STATUS_KEYWORDS = ['is my contact confirmed', 'check my contact', 'contact status', 'is my contact set up'];
-  const TALK_TO_SOMEONE_KEYWORDS = ['someone to talk to', 'talk to someone', "don't want to be alone", 'dont want to be alone', 'i need to talk'];
+  const EMERGENCY_KEYWORDS = ['sos', 'emergency', 'help me', 'send help', 'i need help', 'dharura', 'nisaidie', 'naomba msaada', 'tuma msaada'];
+  const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help', 'piga simu ya dharura', 'piga simu mtu wangu wa dharura'];
+  const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact', 'whatsapp dharura'];
+  const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed', 'je wamethibitisha', 'wanakuja'];
+  const CONTACT_STATUS_KEYWORDS = ['is my contact confirmed', 'check my contact', 'contact status', 'is my contact set up', 'je mtu wangu wa dharura amethibitishwa', 'hali ya mtu wangu wa dharura'];
+  const TALK_TO_SOMEONE_KEYWORDS = ['someone to talk to', 'talk to someone', "don't want to be alone", 'dont want to be alone', 'i need to talk', 'nataka kuongea na mtu', 'sitaki kuwa peke yangu'];
   // "who's here" vs "what's here": kept as a visually distinct list (not
   // merged into DESCRIBE_KEYWORDS) since they trigger genuinely different
   // features — face recognition vs. scene description — even though a
@@ -1032,10 +1309,11 @@
     'who is around', "who's around", 'whos around',
     'is anyone here', 'is anyone around',
     'recognize this person', 'recognize them',
-    'who is that', "who's that", 'who is in front of me'
+    'who is that', "who's that", 'who is in front of me',
+    'nani yuko hapa', 'kuna mtu yeyote hapa', 'nani huyo'
   ];
-  const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to'];
-  const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue'];
+  const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to', 'nielekeze kwenda', 'nipeleke', 'maelekezo ya kwenda'];
+  const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue', 'endelea', 'inayofuata'];
 
   function setState(state) {
     appState = state;
@@ -1065,7 +1343,23 @@
     setError('Unexpected error: ' + msg);
   });
 
+  // ---------- Speech output ----------
+  // English (and any language without a working cloud voice) uses the
+  // browser's built-in speechSynthesis, unchanged from before. Swahili
+  // routes through ElevenLabs (see api/tts.js) instead, since browser
+  // Swahili voice availability is inconsistent across devices — see
+  // elevenLabsAvailable below for the fallback if that call fails.
+  let elevenLabsAvailable = true;
+
   function speak(text, onDone) {
+    if (preferredLanguage === 'sw' && elevenLabsAvailable) {
+      speakViaElevenLabs(text, onDone);
+      return;
+    }
+    speakWithBrowserVoice(text, onDone);
+  }
+
+  function speakWithBrowserVoice(text, onDone) {
     if (!('speechSynthesis' in window)) { if (onDone) onDone(); return; }
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
@@ -1089,6 +1383,56 @@
     const safetyTimer = setTimeout(finish, estimatedMs);
 
     window.speechSynthesis.speak(utter);
+  }
+
+  // Fetches spoken audio from ElevenLabs and plays it. On any failure
+  // (missing server config, network error, exhausted free-tier credits),
+  // flips elevenLabsAvailable off for the rest of this session — so the
+  // person isn't stuck waiting on a failing network call before every
+  // single response — announces the fallback once (so the degrade is
+  // honest, not silent), then continues using the device's built-in voice
+  // for the rest of the session.
+  async function speakViaElevenLabs(text, onDone) {
+    setState('speaking');
+    let done = false;
+    let audioEl = null;
+    let objectUrl = null;
+    let safetyTimer = null;
+
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (safetyTimer) clearTimeout(safetyTimer);
+      if (objectUrl) { try { URL.revokeObjectURL(objectUrl); } catch (e) {} }
+      if (onDone) onDone();
+    };
+
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) throw new Error('Text-to-speech request failed');
+
+      const blob = await res.blob();
+      objectUrl = URL.createObjectURL(blob);
+      audioEl = new Audio(objectUrl);
+      audioEl.onended = finish;
+      audioEl.onerror = finish;
+
+      safetyTimer = setTimeout(finish, Math.max(6000, text.length * 120));
+      await audioEl.play();
+    } catch (err) {
+      if (elevenLabsAvailable) {
+        elevenLabsAvailable = false;
+        speakWithBrowserVoice(t('ttsUnavailableFallback'), () => {
+          speakWithBrowserVoice(text, onDone);
+        });
+        return;
+      }
+      speakWithBrowserVoice(text, onDone);
+    }
   }
 
   function speakAsync(text) {
@@ -1245,26 +1589,26 @@
 
   async function handleTalkToSomeoneIntent() {
     if (!myPeople.length) {
-      await speakAsync('You have not added anyone to My People yet. You can add someone from the SOS tab.');
+      await speakAsync(t('talkToSomeoneNoPeople'));
       return;
     }
     const names = myPeople.map(p => p.name).join(', ');
-    await speakAsync(`You can reach: ${names}. Who would you like to call?`);
+    await speakAsync(t('talkToSomeoneReachList', names));
 
     const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
     if (!heard) {
-      await speakAsync("I didn't catch that. You can also tap a name under My People in the SOS tab.");
+      await speakAsync(t('talkToSomeoneDidntCatch'));
       return;
     }
 
     const lower = heard.toLowerCase();
     const match = myPeople.find(p => lower.includes(p.name.toLowerCase()));
     if (!match) {
-      await speakAsync("I couldn't match that to someone in your list. You can tap a name under My People in the SOS tab.");
+      await speakAsync(t('talkToSomeoneNoMatch'));
       return;
     }
 
-    await speakAsync(`Calling ${match.name}.`);
+    await speakAsync(t('talkToSomeoneCalling', match.name));
     window.location.href = `tel:${match.phone}`;
   }
 
@@ -1294,9 +1638,9 @@
 
       if (data.status === 'not_configured') {
         const countNote = familiarFaces.length
-          ? ` You do have ${familiarFaces.length} ${familiarFaces.length === 1 ? 'person' : 'people'} saved, for when this is ready.`
+          ? t('faceRecognitionCountNote', familiarFaces.length)
           : '';
-        await speakAsync('Face recognition is not set up yet, so I cannot tell you who is nearby.' + countNote);
+        await speakAsync(t('faceRecognitionNotConfigured', countNote));
         return;
       }
 
@@ -1304,13 +1648,13 @@
         const names = data.recognized
           .map(p => (p.relationship ? `${p.name}, your ${p.relationship}` : p.name))
           .join(', and ');
-        await speakAsync(`I can see ${names} nearby.`);
+        await speakAsync(t('faceRecognitionRecognized', names));
       } else {
-        await speakAsync("I don't recognize anyone in front of you right now.");
+        await speakAsync(t('faceRecognitionNoneRecognized'));
       }
     } catch (err) {
       setError('Face recognition check failed: ' + (err && err.message ? err.message : err));
-      await speakAsync('Something went wrong checking for familiar faces.');
+      await speakAsync(t('faceRecognitionFailed'));
     }
   }
 
@@ -1511,11 +1855,10 @@
       if (!hasAnnouncedInstructions) {
         hasAnnouncedInstructions = true;
         speak(
-          'Voice control active. Double-tap anywhere on the screen to speak. ' +
-          'Long-press anywhere, or say emergency, to send an S O S alert.',
+          t('voiceControlActive'),
           () => {
             if (!emergencyContact) {
-              speak('No emergency contact is set yet. Long-press anywhere to add one.');
+              speak(t('noContactYetLongPress'));
             }
           }
         );
@@ -1709,7 +2052,8 @@
       image: activeImageBase64,
       history: conversationHistory,
       question: question || '',
-      mode: assistanceMode
+      mode: assistanceMode,
+      language: preferredLanguage
     };
 
     const response = await fetch('/api/describe', {
@@ -1774,7 +2118,7 @@
 
   async function checkContactConfirmation({ speakResult = true } = {}) {
     if (!emergencyContact) {
-      if (speakResult) await speakAsync('No emergency contact is set yet.');
+      if (speakResult) await speakAsync(t('noContactYetPlain'));
       return;
     }
     try {
@@ -1787,12 +2131,10 @@
       renderSosScreen();
 
       if (speakResult) {
-        await speakAsync(confirmed
-          ? 'Yes, your emergency contact has completed setup and is ready.'
-          : 'Not yet. They still need to tap the link you sent them.');
+        await speakAsync(confirmed ? t('contactConfirmedYes') : t('contactConfirmedNo'));
       }
     } catch (e) {
-      if (speakResult) await speakAsync('I could not check right now. Try again in a moment.');
+      if (speakResult) await speakAsync(t('couldNotCheckNow'));
     }
   }
 
@@ -1803,20 +2145,20 @@
     pendingContactDigits = null;
 
     try {
-      await speakAsync("Please say your emergency contact's phone number.");
+      await speakAsync(t('askContactPhoneNumber'));
       const digitsText = voiceSupported ? await listenOnce({ timeoutMs: 8000 }) : null;
       const digits = (digitsText || '').replace(/\D/g, '');
 
       if (!digits || digits.length < 7) {
         setState('idle');
-        await speakAsync("I didn't catch a valid phone number. Long-press anywhere to try again.");
+        await speakAsync(t('didntCatchPhoneNumber'));
         return;
       }
 
       pendingContactDigits = digits;
       awaitingContactConfirmation = true;
       setState('idle');
-      await speakAsync(`I heard ${spacedDigits(digits)}. Long-press to confirm, or double-tap to try again.`);
+      await speakAsync(t('heardPhoneNumberConfirm', spacedDigits(digits)));
     } finally {
       contactSetupInProgress = false;
     }
@@ -1832,14 +2174,14 @@
 
   async function triggerSOS() {
     if (!emergencyContact) {
-      await speakAsync('No emergency contact is set. Long-press anywhere to set one now.');
+      await speakAsync(t('noContactSetLongPress'));
       resetToIdle();
       return;
     }
 
     setState('thinking');
     setStatus('Preparing emergency alert…');
-    await speakAsync('Preparing your emergency alert.');
+    await speakAsync(t('preparingEmergencyAlert'));
 
     let lat = null, lng = null;
     try {
@@ -1866,13 +2208,16 @@
 
     activeSosId = id;
 
+    // SMS body is addressed to the emergency contact, not the app's user —
+    // stays English regardless of the user's own language preference, since
+    // translating it doesn't serve the person it's actually for.
     const mapPart = (lat && lng) ? `My location: https://maps.google.com/?q=${lat},${lng}. ` : '';
     const confirmPart = id ? `Confirm you are coming: ${window.location.origin}/confirm.html?id=${id}` : '';
     const message = `SOS! I need help. ${mapPart}${confirmPart}`.trim();
     const smsUri = `sms:${emergencyContact.phone}?body=${encodeURIComponent(message)}`;
 
-    const pushNote = pushSent ? ' A push notification was also sent to them.' : '';
-    await speakAsync('Emergency message ready. Please send it now.' + pushNote + ' Say did they confirm, any time, to check for a response.');
+    const pushNote = pushSent ? t('emergencyPushNote') : '';
+    await speakAsync(t('emergencyMessageReady', pushNote));
     window.location.href = smsUri;
 
     setState('idle');
@@ -1880,44 +2225,44 @@
   }
 
   function triggerCall() {
-    if (!emergencyContact) { speak('No emergency contact is set. Long-press anywhere to set one now.'); return; }
-    speak('Calling your emergency contact.', () => {
+    if (!emergencyContact) { speak(t('noContactSetLongPress')); return; }
+    speak(t('callingContact'), () => {
       window.location.href = `tel:${emergencyContact.phone}`;
     });
   }
 
   function triggerWhatsapp() {
-    if (!emergencyContact) { speak('No emergency contact is set. Long-press anywhere to set one now.'); return; }
+    if (!emergencyContact) { speak(t('noContactSetLongPress')); return; }
     const waNumber = emergencyContact.phone.startsWith('0')
       ? '254' + emergencyContact.phone.slice(1)
       : emergencyContact.phone;
     const message = 'SOS! I need help.';
-    speak('Opening WhatsApp.', () => {
+    speak(t('openingWhatsapp'), () => {
       window.location.href = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
     });
   }
 
   async function checkSosConfirmation() {
     if (!activeSosId) {
-      await speakAsync('No emergency alert has been sent yet.');
+      await speakAsync(t('noAlertSentYet'));
       return;
     }
     try {
       const res = await fetch('/api/sos-status?id=' + encodeURIComponent(activeSosId));
       const data = await res.json();
       if (data.status === 'confirmed') {
-        await speakAsync('Yes! Your emergency contact confirmed they are on the way.');
+        await speakAsync(t('sosConfirmedYes'));
       } else {
-        await speakAsync('Not yet. They have not confirmed.');
+        await speakAsync(t('sosConfirmedNo'));
       }
     } catch (e) {
-      await speakAsync('I could not check right now. Try again in a moment.');
+      await speakAsync(t('couldNotCheckNow'));
     }
   }
 
   async function handleEmergencyIntent() {
     if (!emergencyContact) {
-      await speakAsync('No emergency contact is set. Long-press anywhere to set one now.');
+      await speakAsync(t('noContactSetLongPress'));
       resetToIdle();
     } else {
       await triggerSOS();
@@ -2149,7 +2494,7 @@
     navProgressCard.style.display = 'none';
     routeMapCard.style.display = 'none';
 
-    await speakAsync(`Getting directions to ${destinationText}.`);
+    await speakAsync(t('gettingDirectionsTo', destinationText));
 
     let lat = null, lng = null;
     try {
@@ -2185,8 +2530,8 @@
         usedCachedFallback = true;
       } else {
         const msg = (lat == null)
-          ? 'I could not get your current location, and no saved route to this destination is available.'
-          : 'Something went wrong getting directions, and no saved route to this destination is available.';
+          ? t('navigationFailedNoLocationNoCache')
+          : t('navigationFailedErrorNoCache');
         setError('Navigation failed: ' + msg);
         await speakAsync(msg);
         return;
@@ -2213,13 +2558,13 @@
     navMetaEl.textContent = `${activeRoute.destinationName} — ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking`;
 
     if (usedCachedFallback) {
-      await speakAsync('No connection right now. Using a saved route to this destination from earlier.');
+      await speakAsync(t('noConnectionUsingCached'));
     }
 
     const routeIntroByMode = {
-      independent: `${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText}.`,
-      guided: `Heading to ${activeRoute.destinationName}. Total distance ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking. I'll guide you one step at a time — ask me any time if you want me to check what's ahead.`,
-      support: `Okay, we're heading to ${activeRoute.destinationName}. It's about ${activeRoute.totalDistanceText}, roughly ${activeRoute.totalDurationText} walking. We'll take it one step at a time, and you can ask me to check what's ahead whenever you like — no rush.`
+      independent: t('routeIntroIndependent', activeRoute.totalDistanceText, activeRoute.totalDurationText),
+      guided: t('routeIntroGuided', activeRoute.destinationName, activeRoute.totalDistanceText, activeRoute.totalDurationText),
+      support: t('routeIntroSupport', activeRoute.destinationName, activeRoute.totalDistanceText, activeRoute.totalDurationText)
     };
     await speakAsync(routeIntroByMode[assistanceMode] || routeIntroByMode.guided);
     await speakCurrentStep();
@@ -2247,18 +2592,36 @@
     return `roughly ${distanceText}, about ${steps} of your steps`;
   }
 
+  // Direction words used inside maneuver phrasing ("Turn left" / "Geuka
+  // kushoto"). Keyed by Mapbox's documented modifier values.
+  const DIRECTION_WORDS = {
+    'uturn': { en: 'around — a U-turn', sw: 'nyuma — geuka kabisa' },
+    'sharp right': { en: 'sharply right', sw: 'kulia sana' },
+    'right': { en: 'right', sw: 'kulia' },
+    'slight right': { en: 'slightly right', sw: 'kidogo kulia' },
+    'straight': { en: 'straight', sw: 'moja kwa moja' },
+    'slight left': { en: 'slightly left', sw: 'kidogo kushoto' },
+    'left': { en: 'left', sw: 'kushoto' },
+    'sharp left': { en: 'sharply left', sw: 'kushoto sana' }
+  };
+
   // Turns Mapbox's structured maneuver (type/modifier) into a short spoken
-  // phrase, e.g. "Turn left". Returns null for "just keep walking" segments
+  // phrase, e.g. "Turn left" / "Geuka kushoto" — language-aware, so a
+  // Swahili sentence never ends up with an English direction word stuck in
+  // the middle of it. Returns null for "just keep walking" segments
   // (continue/depart/merge/new-name/arrive), which speakCurrentStep phrases
   // as a plain forward-walking instruction instead.
   function shortManeuverPhrase(step) {
     const type = step.maneuverType;
-    const modifier = step.maneuverModifier;
+    const rawModifier = (step.maneuverModifier || '').replace(/_/g, ' ').toLowerCase();
     if (!type) return null;
+
     if (['turn', 'end of road', 'fork', 'ramp', 'off ramp', 'on ramp'].includes(type)) {
-      return modifier ? `Turn ${modifier.replace(/_/g, ' ')}` : 'Turn';
+      const dirEntry = DIRECTION_WORDS[rawModifier];
+      const dirWord = dirEntry ? (preferredLanguage === 'sw' ? dirEntry.sw : dirEntry.en) : null;
+      return dirWord ? t('maneuverTurn', dirWord) : t('maneuverTurnPlain');
     }
-    if (type === 'roundabout' || type === 'rotary') return 'Go through the roundabout';
+    if (type === 'roundabout' || type === 'rotary') return t('maneuverRoundabout');
     return null; // depart, continue, new name, merge, arrive, etc.
   }
 
@@ -2275,30 +2638,30 @@
 
     if (assistanceMode === 'independent') {
       const spoken = maneuverPhrase
-        ? `${maneuverPhrase} in ${distancePhrase}.`
-        : `Forward, ${distancePhrase}.`;
+        ? t('stepTurn', maneuverPhrase, distancePhrase)
+        : t('stepForward', distancePhrase);
       await speakAsync(spoken);
       return;
     }
 
     if (assistanceMode === 'support') {
       if (maneuverPhrase) {
-        await speakAsync(`Coming up: ${maneuverPhrase.toLowerCase()}.`);
+        await speakAsync(t('stepSupportComingUp', maneuverPhrase));
         await new Promise(r => setTimeout(r, 400));
-        await speakAsync(`That's ${distancePhrase} ahead. Take your time — say next, or tap Next, whenever you're ready.`);
+        await speakAsync(t('stepSupportDistanceTakeYourTime', distancePhrase));
       } else {
-        await speakAsync('No turns for this stretch — just keep walking forward.');
+        await speakAsync(t('stepSupportNoTurns'));
         await new Promise(r => setTimeout(r, 400));
-        await speakAsync(`That's ${distancePhrase}. Take your time — say next, or tap Next, whenever you're ready.`);
+        await speakAsync(t('stepSupportDistanceTakeYourTime', distancePhrase));
       }
       return;
     }
 
     // guided (default)
     if (maneuverPhrase) {
-      await speakAsync(`You're nearing the next turn — ${distancePhrase}. Then ${maneuverPhrase.toLowerCase()}.`);
+      await speakAsync(t('stepGuidedTurn', distancePhrase, maneuverPhrase));
     } else {
-      await speakAsync(`No turns for this stretch. Walk forward, ${distancePhrase}.`);
+      await speakAsync(t('stepGuidedNoTurns', distancePhrase));
     }
   }
 
@@ -2311,12 +2674,12 @@
     return askBackend({ question: 'Briefly describe what is immediately around me right now, to help me confirm I am at the right place.' });
   }
 
-  const ARRIVAL_YES_KEYWORDS = ['yes', 'yeah', 'yup', 'correct', "that's right", 'thats right', 'right place'];
-  const ARRIVAL_NO_KEYWORDS = ['no', 'not right', 'wrong place', 'not it', "that's not", 'thats not'];
+  const ARRIVAL_YES_KEYWORDS = ['yes', 'yeah', 'yup', 'correct', "that's right", 'thats right', 'right place', 'ndio', 'ndiyo', 'sahihi', 'hiyo ni sahihi'];
+  const ARRIVAL_NO_KEYWORDS = ['no', 'not right', 'wrong place', 'not it', "that's not", 'thats not', 'hapana', 'si sahihi', 'si hapo'];
 
   async function advanceToNextStep() {
     if (!activeRoute) {
-      await speakAsync('No route is active right now.');
+      await speakAsync(t('noRouteActive'));
       return;
     }
     activeRoute.currentStepIndex += 1;
@@ -2333,7 +2696,7 @@
 
       if (knownPlace) {
         // Already visited before — no need to re-confirm every time.
-        await speakAsync(`You should be at ${destName} now.`);
+        await speakAsync(t('arrivedKnownPlace', destName));
         recordPlaceVisit(destName, destLat, destLng);
         renderPlacesScreen();
         return;
@@ -2341,7 +2704,7 @@
 
       // New place: confirm before saving, so a wrong or approximate GPS
       // fix doesn't silently get remembered as "the library" or similar.
-      await speakAsync(`You should be near ${destName} now. Let me check what's around, to help confirm.`);
+      await speakAsync(t('arrivedNewPlaceChecking', destName));
 
       let description = null;
       try {
@@ -2352,7 +2715,7 @@
       if (description) {
         await speakAsync(description);
       }
-      await speakAsync('Does that sound like the right place? Say yes to save it, or no if this is not it.');
+      await speakAsync(t('arrivedConfirmQuestion'));
 
       const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
       const lower = (heard || '').toLowerCase();
@@ -2361,11 +2724,11 @@
 
       if (saidYes) {
         recordPlaceVisit(destName, destLat, destLng);
-        await speakAsync(`Saved ${destName} for next time.`);
+        await speakAsync(t('arrivedSaved', destName));
       } else if (saidNo) {
-        await speakAsync("Okay, I won't save this as that place. You can try navigating again if the route wasn't right.");
+        await speakAsync(t('arrivedNotSaved'));
       } else {
-        await speakAsync("I didn't catch a clear answer, so I won't save this place yet. You can add it later from the Places tab.");
+        await speakAsync(t('arrivedUnclear'));
       }
       renderPlacesScreen();
       return;
@@ -2388,10 +2751,10 @@
     if (navigationInProgress) return;
     navigationInProgress = true;
     try {
-      await speakAsync('Where do you want to go?');
+      await speakAsync(t('whereDoYouWantToGo'));
       const destText = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
       if (!destText || !destText.trim()) {
-        await speakAsync("I didn't catch that. Try again from the Places tab.");
+        await speakAsync(t('navDidntCatchDestination'));
         return;
       }
       await beginRoute(destText.trim());
@@ -2418,7 +2781,7 @@
       const modeCommand = MODE_COMMANDS.find(cmd => cmd.keywords.some(k => lower.includes(k)));
       if (modeCommand) {
         setAssistanceMode(modeCommand.mode);
-        await speakAsync(`Switched to ${modeCommand.label} mode.`);
+        await speakAsync(t('modeSwitched', spokenModeLabel(modeCommand.mode)));
         resetToIdle();
         return;
       }
@@ -2521,7 +2884,7 @@
       const digits = pendingContactDigits;
       awaitingContactConfirmation = false;
       pendingContactDigits = null;
-      speak('Emergency contact saved. Opening a message to invite them now.', () => {
+      speak(t('contactSavedOpeningInvite'), () => {
         saveEmergencyContact(digits);
       });
       return;
