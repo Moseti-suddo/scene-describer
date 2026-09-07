@@ -847,6 +847,10 @@
       <div class="connect-card-title">Peer Support</div>
       <div class="connect-card-sub">Preview — talk with peers who share your experience (not yet connected)</div>
     </button>
+    <button class="connect-card" id="openProfessionalSupportBtn" type="button">
+      <div class="connect-card-title">Professional Support</div>
+      <div class="connect-card-sub">Preview — connect with a qualified professional (not yet connected)</div>
+    </button>
     <p class="sos-help-text">
       Say "call" or "message" followed by a name, "open my circle", "open community", or "open peer support", from any screen.
     </p>
@@ -897,6 +901,18 @@
       to a backend yet.
     </div>
     <div id="peerSupportCatalogList"></div>
+  </div>
+
+  <!-- ---------- Professional Support (preview only) ---------- -->
+  <div class="view" id="professionalSupportView">
+    <button class="text-link-btn" id="professionalSupportBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
+    <h1>Professional Support</h1>
+    <div class="devices-honesty-note" style="margin-bottom:14px;">
+      Professional Support is for reaching qualified counselors or professionals — it is not
+      a replacement for emergency services. Preview only: matching and booking aren't connected
+      to a backend yet.
+    </div>
+    <div id="professionalSupportCatalogList"></div>
   </div>
 
 </div>
@@ -974,6 +990,10 @@
   const cancelCircleBtn = document.getElementById('cancelCircleBtn');
   const communityCatalogListEl = document.getElementById('communityCatalogList');
   const peerSupportCatalogListEl = document.getElementById('peerSupportCatalogList');
+  const professionalSupportView = document.getElementById('professionalSupportView');
+  const openProfessionalSupportBtn = document.getElementById('openProfessionalSupportBtn');
+  const professionalSupportBackBtn = document.getElementById('professionalSupportBackBtn');
+  const professionalSupportCatalogListEl = document.getElementById('professionalSupportCatalogList');
 
   // ---------- Onboarding gate ----------
   // First-time users are sent through onboarding.html before ever reaching
@@ -1336,6 +1356,11 @@
     { name: 'Career Support', desc: 'Peers discussing employment and career growth.' },
     { name: 'Daily Independence', desc: 'Practical experiences around independent living.' }
   ];
+  const PROFESSIONAL_SUPPORT_CATALOG = [
+    { name: 'Counseling', desc: 'Licensed counselors for general mental health support.' },
+    { name: 'Orientation & Mobility Specialists', desc: 'Professional O&M training for independent travel.' },
+    { name: 'Career Counseling', desc: 'Professional guidance on employment and career planning.' }
+  ];
 
   // ---------- Familiar Faces state (registered during onboarding) ----------
   // Used for the honest face-recognition stub below — this is the same
@@ -1627,8 +1652,8 @@
   }
 
   // ---------- Tabs ----------
-  const CONNECT_SUBTABS = ['connect', 'circle', 'community', 'peerSupport'];
-  function setTab(tab) {
+    const CONNECT_SUBTABS = ['connect', 'circle', 'community', 'peerSupport', 'professionalSupport'];
+    function setTab(tab) {
     currentTab = tab;
     homeView.classList.toggle('active', tab === 'home');
     sosView.classList.toggle('active', tab === 'sos');
@@ -1639,6 +1664,7 @@
     circleView.classList.toggle('active', tab === 'circle');
     communityView.classList.toggle('active', tab === 'community');
     peerSupportView.classList.toggle('active', tab === 'peerSupport');
+    professionalSupportView.classList.toggle('active', tab === 'professionalSupport');
     document.querySelectorAll('.nav-btn').forEach(b => {
       const isConnectFamily = CONNECT_SUBTABS.includes(tab) && b.dataset.tab === 'connect';
       const isSelected = b.dataset.tab === tab || isConnectFamily;
@@ -1648,6 +1674,7 @@
     if (tab === 'circle') renderCircleScreen();
     if (tab === 'community') renderCommunityScreen();
     if (tab === 'peerSupport') renderPeerSupportScreen();
+    if (tab === 'professionalSupport') renderProfessionalSupportScreen();
     if (tab === 'sos') {
       renderSosScreen();
       if (emergencyContact && !emergencyContact.confirmed) {
@@ -1754,9 +1781,11 @@
   openCircleBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('circle'); });
   openCommunityBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('community'); });
   openPeerSupportBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('peerSupport'); });
+  openProfessionalSupportBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('professionalSupport'); });
   circleBackBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('connect'); });
   communityBackBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('connect'); });
   peerSupportBackBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('connect'); });
+  professionalSupportBackBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('connect'); });
 
   addCircleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1906,6 +1935,7 @@
 
   function renderCommunityScreen() { renderCatalogList(communityCatalogListEl, COMMUNITY_CATALOG, 'community'); }
   function renderPeerSupportScreen() { renderCatalogList(peerSupportCatalogListEl, PEER_SUPPORT_CATALOG, 'peer support'); }
+  function renderProfessionalSupportScreen() { renderCatalogList(professionalSupportCatalogListEl, PROFESSIONAL_SUPPORT_CATALOG, 'professional support'); }
 
   // ---------- Familiar Faces (honest recognition stub) ----------
   // There is no computer-vision/face-matching backend connected yet — see
@@ -2391,6 +2421,136 @@
     if (!text) return false;
     const lower = text.toLowerCase();
     return HAZARD_KEYWORDS.some(k => lower.includes(k));
+  }
+
+  // ---------- AI Orchestration (fallback only) ----------
+  // Only reached when nothing in the deterministic keyword chain above
+  // matched (spec Section 21) — this never runs for phrases the app
+  // already understands directly, and it never persists anything (Section 8).
+  function getOrchestrationContext() {
+    return {
+      currentTab,
+      assistanceMode,
+      hasActiveRoute: !!activeRoute,
+      activeRouteDestination: activeRoute ? activeRoute.destinationName : null,
+      hasEmergencyContact: !!emergencyContact
+    };
+  }
+
+  async function classifyIntentViaAI(text) {
+    try {
+      const res = await fetch('/api/orchestrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, context: getOrchestrationContext() })
+      });
+      const data = await res.json();
+      if (!res.ok) return null;
+      return data;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  // Spec Section 4 — "I need help" flow. Reuses the existing interaction
+  // pipeline for whatever the person says next, rather than duplicating
+  // routing logic here.
+  async function runNeedHelpFlow() {
+    await speakAsync('Sure. What do you need help with — your surroundings, getting somewhere, someone to talk to, or an emergency?');
+    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+    if (!heard) { resetToIdle(); return; }
+    await runInteractionCycle(heard);
+  }
+
+  // Spec Section 5 — "I need someone" flow.
+  async function runNeedSomeoneFlow() {
+    await speakAsync('Would you like to talk to someone you trust, someone who understands, or a professional?');
+    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+    const lower = (heard || '').toLowerCase();
+    if (lower.includes('trust') || lower.includes('circle')) {
+      setTab('circle');
+      await speakAsync('Opening My Circle.');
+    } else if (lower.includes('understand') || lower.includes('peer')) {
+      setTab('peerSupport');
+      await speakAsync('Peer Support is a preview — not connected to a real backend yet.');
+    } else if (lower.includes('professional')) {
+      setTab('professionalSupport');
+      await speakAsync('Professional Support is a preview — not connected to a real backend yet.');
+    } else {
+      await speakAsync("I didn't catch that. Say trust, understands, or professional.");
+    }
+    resetToIdle();
+  }
+
+  // Dispatches an AI-classified intent to the app's EXISTING features
+  // (spec Section 16 — this never duplicates navigation/contacts/SOS/peer
+  // support, it only calls what already exists). Returns true if it fully
+  // handled the turn, false to let the caller fall through to the normal
+  // describe pipeline (used for UNDERSTAND and any failure/GENERAL-after-
+  // reprompt case).
+  async function tryAIOrchestration(speechText) {
+    const classification = await classifyIntentViaAI(speechText);
+    if (!classification) return false; // network/API failure — fall through rather than guess
+
+    const { intent, extractedEntity, needsConfirmation, confirmationText, clarifyQuestion } = classification;
+
+    if (intent === 'GENERAL') {
+      await speakAsync(clarifyQuestion || 'What would you like help with?');
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      if (heard) await runInteractionCycle(heard);
+      else resetToIdle();
+      return true;
+    }
+
+    if (intent === 'SAFETY') {
+      await handleEmergencyIntent();
+      return true;
+    }
+
+    if (intent === 'NAVIGATE') {
+      if (extractedEntity) await startNavigationToText(extractedEntity);
+      else await startNavigationByVoice();
+      resetToIdle();
+      return true;
+    }
+
+    if (intent === 'UNDERSTAND') {
+      return false; // let the existing describe pipeline below handle it
+    }
+
+    if (intent === 'HUMAN_CONNECTION') {
+      if (needsConfirmation) {
+        await speakAsync(confirmationText || (extractedEntity ? `Call ${extractedEntity}?` : 'Do that?'));
+        const heard = voiceSupported ? await listenOnce({ timeoutMs: 5000 }) : null;
+        const lower = (heard || '').toLowerCase();
+        const confirmed = ARRIVAL_YES_KEYWORDS.some(k => lower.includes(k));
+        if (!confirmed) {
+          await speakAsync("Okay, I won't do that.");
+          resetToIdle();
+          return true;
+        }
+      }
+      if (extractedEntity) {
+        await handleCircleCallOrMessageIntent(extractedEntity, 'call');
+      } else {
+        setTab('circle');
+        await speakAsync('Opening My Circle.');
+      }
+      resetToIdle();
+      return true;
+    }
+
+    if (intent === 'NEED_HELP') {
+      await runNeedHelpFlow();
+      return true;
+    }
+
+    if (intent === 'NEED_SOMEONE') {
+      await runNeedSomeoneFlow();
+      return true;
+    }
+
+    return false;
   }
 
   // ---------- Emergency contact setup (voice-driven) ----------
@@ -3200,6 +3360,17 @@
         }
         resetToIdle();
         return;
+      }
+
+      // Nothing in the keyword chain above matched — try AI classification
+      // before falling back to treating this as a plain scene description.
+      // Skipped for phrases that already look like a describe/hazard
+      // request, since those are handled correctly below without an extra
+      // network round-trip.
+      const looksHandledDirectly = looksLikeFreshSceneRequest(speechText) || looksLikeHazardCheckRequest(speechText);
+      if (!looksHandledDirectly) {
+        const handledByAI = await tryAIOrchestration(speechText);
+        if (handledByAI) return;
       }
     }
 
