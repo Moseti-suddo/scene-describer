@@ -1477,6 +1477,10 @@
   const CALL_NAME_PREFIXES = ['call '];
   const MESSAGE_NAME_PREFIXES = ['message ', 'text '];
   const GO_BACK_KEYWORDS = ['go back', 'back to connect', 'rudi nyuma'];
+  // Explicit way to end an ongoing follow-up conversation loop (see
+  // listenForFollowUp below) without waiting out the silence timeout —
+  // also doubles as the "Stop" command from the original voice-command spec.
+  const STOP_LISTENING_KEYWORDS = ['stop listening', "that's all", 'that will be all', 'never mind', 'nevermind', "i'm done", 'i am done', 'end conversation', 'sitaki tena', 'hilo ni yote', 'imetosha'];
   // "who's here" vs "what's here": kept as a visually distinct list (not
   // merged into DESCRIBE_KEYWORDS) since they trigger genuinely different
   // features — face recognition vs. scene description — even though a
@@ -3061,6 +3065,26 @@
     }
   }
 
+  // ---------- Follow-up listening with silence tolerance ----------
+  // While walking, a gust of wind, traffic noise, or just a pause to cross
+  // a street can eat one listen cycle even when the person meant to keep
+  // talking. Retrying a couple of times before giving up means they don't
+  // have to double-tap again just to continue a conversation that's still
+  // going — but it does still end on its own after sustained silence,
+  // rather than listening (and burning transcription calls) forever.
+  const MAX_FOLLOWUP_SILENT_STRIKES = 2;
+  async function listenForFollowUp() {
+    for (let strikes = 0; strikes <= MAX_FOLLOWUP_SILENT_STRIKES; strikes++) {
+      setState('listening');
+      setStatus(strikes === 0
+        ? 'Listening — keep talking any time, or stay quiet to finish.'
+        : 'Still listening…');
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: 5000 }) : null;
+      if (heard) return heard;
+    }
+    return null;
+  }
+
   // ---------- The core interaction loop ----------
   async function runInteractionCycle(initialSpeech) {
     let speechText = initialSpeech;
@@ -3071,6 +3095,12 @@
 
     if (speechText) {
       const lower = speechText.toLowerCase();
+
+      if (STOP_LISTENING_KEYWORDS.some(k => lower.includes(k))) {
+        await speakAsync('Okay.');
+        resetToIdle();
+        return;
+      }
 
       if (EMERGENCY_KEYWORDS.some(k => lower.includes(k))) {
         await handleEmergencyIntent();
@@ -3190,9 +3220,7 @@
 
       await new Promise(resolve => speak(answer, resolve));
 
-      setState('listening');
-      setStatus('Listening for a follow-up… or stay quiet to finish.');
-      const followUp = voiceSupported ? await listenOnce({ timeoutMs: 5000 }) : null;
+      const followUp = await listenForFollowUp();
 
       if (followUp) {
         await runInteractionCycle(followUp);
