@@ -151,6 +151,7 @@
     border: 2px solid #FFD400;
     border-radius: 10px;
   }
+  .secondary-link-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
   .sos-help-text {
     color: #999;
     font-size: 14px;
@@ -242,6 +243,7 @@
     font-size: 12px;
     font-weight: 700;
   }
+  .global-error-banner .dismiss-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 
   /* ---------- Places / Navigation screen ---------- */
   .places-card {
@@ -582,7 +584,7 @@
 
 <div id="app">
 
-  <div class="view active" id="homeView">
+  <div class="view active" id="homeView" role="tabpanel" aria-labelledby="tab-home">
     <h1>Scene Describer</h1>
 
     <div class="video-frame">
@@ -598,15 +600,15 @@
     <div class="tap-hint" id="tapHint">Double-tap anywhere to begin</div>
   </div>
 
-  <div class="view" id="sosView">
+  <div class="view" id="sosView" role="tabpanel" aria-labelledby="tab-sos">
     <h1>Emergency SOS</h1>
     <div class="sos-card">
-      <div class="contact-status" id="contactStatus">No emergency contact set yet.</div>
+      <div class="contact-status" id="contactStatus" role="status" aria-live="polite">No emergency contact set yet.</div>
       <button class="big-btn" id="sendSosBtn">Send SOS Now</button>
       <button class="secondary-link-btn" id="changeContactBtn">Set / change emergency contact (voice)</button>
 
       <div class="manual-contact-row">
-        <input type="tel" id="manualContactInput" placeholder="Or type contact number" inputmode="numeric" />
+        <input type="tel" id="manualContactInput" placeholder="Or type contact number" inputmode="numeric" aria-label="Emergency contact phone number" aria-describedby="globalErrorText" />
         <button class="secondary-link-btn" id="manualContactSaveBtn" type="button">Save</button>
       </div>
     </div>
@@ -620,9 +622,9 @@
       <button class="secondary-link-btn" id="addPersonBtn" type="button">+ Add a person</button>
 
       <div class="add-person-form" id="addPersonForm" style="display:none;">
-        <input type="text" id="personNameInput" placeholder="Name" />
-        <input type="text" id="personRelationshipInput" placeholder="Relationship (e.g. Sister, Friend)" />
-        <input type="tel" id="personPhoneInput" placeholder="Phone number" inputmode="numeric" />
+        <input type="text" id="personNameInput" placeholder="Name" aria-label="Person's name" aria-describedby="globalErrorText" />
+        <input type="text" id="personRelationshipInput" placeholder="Relationship (e.g. Sister, Friend)" aria-label="Relationship" />
+        <input type="tel" id="personPhoneInput" placeholder="Phone number" inputmode="numeric" aria-label="Person's phone number" aria-describedby="globalErrorText" />
         <div class="add-person-form-actions">
           <button class="secondary-link-btn" id="savePersonBtn" type="button">Save</button>
           <button class="secondary-link-btn" id="cancelPersonBtn" type="button" style="border-color:#666; color:#999;">Cancel</button>
@@ -640,20 +642,20 @@
     </div>
   </div>
 
-  <div class="view" id="placesView">
+  <div class="view" id="placesView" role="tabpanel" aria-labelledby="tab-places">
     <h1>Places</h1>
     <div class="places-card">
       <div class="saved-places-list" id="savedPlacesList"></div>
       <button class="secondary-link-btn" id="newDestinationBtn" type="button">Where do you want to go? (voice)</button>
       <div class="manual-dest-row">
-        <input type="text" id="manualDestInput" placeholder="Or type a destination" />
+        <input type="text" id="manualDestInput" placeholder="Or type a destination" aria-label="Destination" aria-describedby="globalErrorText" />
         <button class="secondary-link-btn" id="manualDestGoBtn" type="button">Go</button>
       </div>
     </div>
 
     <div class="nav-progress-card" id="navProgressCard" style="display:none;">
-      <div class="nav-meta" id="navMeta"></div>
-      <div class="nav-step-text" id="navStepText"></div>
+      <div class="nav-meta" id="navMeta" role="status" aria-live="polite"></div>
+      <div class="nav-step-text" id="navStepText" role="status" aria-live="polite"></div>
       <button class="next-step-btn" id="nextStepBtn" type="button">Next</button>
     </div>
 
@@ -669,7 +671,7 @@
     </div>
   </div>
 
-  <div class="view" id="devicesView">
+  <div class="view" id="devicesView" role="tabpanel" aria-labelledby="tab-devices">
     <h1>Devices</h1>
 
     <div class="device-card" id="deviceCard-glasses">
@@ -704,16 +706,16 @@
     </div>
   </div>
 
-  <div class="view" id="settingsView">
+  <div class="view" id="settingsView" role="tabpanel" aria-labelledby="tab-settings">
     <h1>Settings</h1>
 
     <div class="settings-card">
       <h2>Assistance mode</h2>
-      <div class="contact-status" id="settingsModeStatus" style="margin-bottom:12px;">Current: Guided</div>
-      <div class="mode-btn-row">
-        <button class="mode-btn" id="settingsModeBtn-independent" data-mode="independent" type="button">Independent</button>
-        <button class="mode-btn" id="settingsModeBtn-guided" data-mode="guided" type="button">Guided</button>
-        <button class="mode-btn" id="settingsModeBtn-support" data-mode="support" type="button">Support</button>
+      <div class="contact-status" id="settingsModeStatus" style="margin-bottom:12px;" role="status" aria-live="polite">Current: Guided</div>
+      <div class="mode-btn-row" role="group" aria-label="Assistance mode">
+        <button class="mode-btn" id="settingsModeBtn-independent" data-mode="independent" type="button" aria-pressed="false">Independent</button>
+        <button class="mode-btn" id="settingsModeBtn-guided" data-mode="guided" type="button" aria-pressed="true">Guided</button>
+        <button class="mode-btn" id="settingsModeBtn-support" data-mode="support" type="button" aria-pressed="false">Support</button>
       </div>
       <p class="sos-help-text" id="settingsModeDescription" style="margin-top:10px;"></p>
       <p class="sos-help-text">
@@ -737,28 +739,28 @@
       </div>
 
       <div class="field-card">
-        <label>Notification Frequency</label>
-        <div class="segmented" id="settingsNotifSegmented">
-          <button data-value="off" type="button">Off</button>
-          <button data-value="normal" type="button">Normal</button>
-          <button data-value="frequent" type="button">Frequent</button>
+        <label id="settingsNotifLabel">Notification Frequency</label>
+        <div class="segmented" id="settingsNotifSegmented" role="group" aria-labelledby="settingsNotifLabel">
+          <button data-value="off" type="button" aria-pressed="false">Off</button>
+          <button data-value="normal" type="button" aria-pressed="true">Normal</button>
+          <button data-value="frequent" type="button" aria-pressed="false">Frequent</button>
         </div>
       </div>
 
       <div class="field-card" style="margin-bottom:0;">
-        <label>Preferred Language</label>
-        <div class="segmented" id="settingsLangSegmented">
-          <button data-value="en" type="button">English</button>
-          <button data-value="sw" type="button">Kiswahili</button>
+        <label id="settingsLangLabel">Preferred Language</label>
+        <div class="segmented" id="settingsLangSegmented" role="group" aria-labelledby="settingsLangLabel">
+          <button data-value="en" type="button" aria-pressed="true">English</button>
+          <button data-value="sw" type="button" aria-pressed="false">Kiswahili</button>
         </div>
       </div>
     </div>
 
     <div class="settings-card">
       <h2>Emergency contact</h2>
-      <div class="contact-status" id="settingsContactStatus">No emergency contact set yet.</div>
+      <div class="contact-status" id="settingsContactStatus" role="status" aria-live="polite">No emergency contact set yet.</div>
       <div class="manual-contact-row">
-        <input type="tel" id="settingsContactInput" placeholder="Contact's phone number" inputmode="numeric" />
+        <input type="tel" id="settingsContactInput" placeholder="Contact's phone number" inputmode="numeric" aria-label="Emergency contact phone number" aria-describedby="globalErrorText" />
         <button class="secondary-link-btn" id="settingsContactSaveBtn" type="button" style="margin-top:0;">Save</button>
       </div>
       <p class="sos-help-text">
@@ -777,12 +779,12 @@
 
 </div>
 
-<nav class="navbar" id="navbar">
-  <button class="nav-btn active" data-tab="home">Home</button>
-  <button class="nav-btn" data-tab="sos">SOS</button>
-  <button class="nav-btn" data-tab="places">Places</button>
-  <button class="nav-btn" data-tab="devices">Devices</button>
-  <button class="nav-btn" data-tab="settings">Settings</button>
+<nav class="navbar" id="navbar" role="tablist" aria-label="Main sections">
+  <button class="nav-btn active" data-tab="home" role="tab" aria-selected="true" aria-controls="homeView" id="tab-home">Home</button>
+  <button class="nav-btn" data-tab="sos" role="tab" aria-selected="false" aria-controls="sosView" id="tab-sos">SOS</button>
+  <button class="nav-btn" data-tab="places" role="tab" aria-selected="false" aria-controls="placesView" id="tab-places">Places</button>
+  <button class="nav-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devicesView" id="tab-devices">Devices</button>
+  <button class="nav-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="settingsView" id="tab-settings">Settings</button>
 </nav>
 
 <script>
@@ -1453,7 +1455,11 @@
     placesView.classList.toggle('active', tab === 'places');
     devicesView.classList.toggle('active', tab === 'devices');
     settingsView.classList.toggle('active', tab === 'settings');
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.nav-btn').forEach(b => {
+      const isSelected = b.dataset.tab === tab;
+      b.classList.toggle('active', isSelected);
+      b.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    });
     if (tab === 'sos') {
       renderSosScreen();
       renderMyPeopleList();
@@ -1661,7 +1667,10 @@
   // ---------- Settings screen ----------
   function renderSettingsScreen() {
     ASSISTANCE_MODES.forEach(m => {
-      document.getElementById(`settingsModeBtn-${m}`).classList.toggle('active', m === assistanceMode);
+      const btn = document.getElementById(`settingsModeBtn-${m}`);
+      const isActive = m === assistanceMode;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
     settingsModeStatusEl.textContent = `Current: ${MODE_INFO[assistanceMode].label}`;
     settingsModeDescriptionEl.textContent = MODE_INFO[assistanceMode].desc;
@@ -1669,10 +1678,14 @@
     loadSettingsVoiceOptions();
     settingsSpeedRange.value = voicePrefs.rate || 1;
     settingsNotifSegmented.querySelectorAll('button').forEach(b => {
-      b.classList.toggle('selected', b.dataset.value === notificationFrequency);
+      const isSelected = b.dataset.value === notificationFrequency;
+      b.classList.toggle('selected', isSelected);
+      b.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
     });
     settingsLangSegmented.querySelectorAll('button').forEach(b => {
-      b.classList.toggle('selected', b.dataset.value === preferredLanguage);
+      const isSelected = b.dataset.value === preferredLanguage;
+      b.classList.toggle('selected', isSelected);
+      b.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
     });
 
     if (!emergencyContact) {

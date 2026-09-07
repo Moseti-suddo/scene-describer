@@ -27,6 +27,7 @@
     margin-bottom: 20px;
     font-size: 15px;
   }
+  .back-link:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
   .card {
     background: #111;
     border: 1px solid #333;
@@ -88,6 +89,7 @@
     border-radius: 12px;
   }
   .primary-btn:disabled { opacity: 0.6; }
+  .primary-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
   .danger-btn {
     width: 100%;
     padding: 16px;
@@ -100,6 +102,7 @@
     margin-top: 8px;
   }
   .danger-btn:disabled { opacity: 0.6; }
+  .danger-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
   .banner {
     display: none;
     border-radius: 10px;
@@ -163,13 +166,13 @@
 
   <div class="card">
     <h2>Assistance mode</h2>
-    <div class="status-line">
+    <div class="status-line" role="status" aria-live="polite">
       Current: <span class="status-value" id="modeStatus">Guided</span>
     </div>
-    <div class="mode-btn-row" style="margin-top:12px;">
-      <button class="mode-btn" id="modeBtn-independent" data-mode="independent" type="button">Independent</button>
-      <button class="mode-btn" id="modeBtn-guided" data-mode="guided" type="button">Guided</button>
-      <button class="mode-btn" id="modeBtn-support" data-mode="support" type="button">Support</button>
+    <div class="mode-btn-row" style="margin-top:12px;" role="group" aria-label="Assistance mode">
+      <button class="mode-btn" id="modeBtn-independent" data-mode="independent" type="button" aria-pressed="false">Independent</button>
+      <button class="mode-btn" id="modeBtn-guided" data-mode="guided" type="button" aria-pressed="true">Guided</button>
+      <button class="mode-btn" id="modeBtn-support" data-mode="support" type="button" aria-pressed="false">Support</button>
     </div>
     <p class="helper-text" id="modeDescription"></p>
     <p class="helper-text">
@@ -181,10 +184,10 @@
 
   <div class="card">
     <h2>Current emergency contact</h2>
-    <div class="status-line">
+    <div class="status-line" role="status" aria-live="polite">
       Phone: <span class="status-value" id="statusPhone">None set</span>
     </div>
-    <div class="status-line">
+    <div class="status-line" role="status" aria-live="polite">
       Status: <span id="statusConfirmed">—</span>
     </div>
   </div>
@@ -192,7 +195,7 @@
   <div class="card">
     <h2>Set / update emergency contact</h2>
     <label for="phoneInput">Contact's phone number</label>
-    <input type="tel" id="phoneInput" inputmode="numeric" placeholder="e.g. 0712345678" autocomplete="tel" />
+    <input type="tel" id="phoneInput" inputmode="numeric" placeholder="e.g. 0712345678" autocomplete="tel" aria-describedby="errorBanner" />
     <button class="primary-btn" id="saveBtn" type="button">Save contact</button>
     <p class="helper-text">
       Saving sends them a text message with a link to confirm setup on their own phone.
@@ -254,7 +257,10 @@
 
   function renderModeUI() {
     Object.keys(MODE_INFO).forEach(m => {
-      document.getElementById('modeBtn-' + m).classList.toggle('active', m === assistanceMode);
+      const btn = document.getElementById('modeBtn-' + m);
+      const isActive = m === assistanceMode;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
     });
     modeStatus.textContent = MODE_INFO[assistanceMode].label;
     modeDescription.textContent = MODE_INFO[assistanceMode].desc;

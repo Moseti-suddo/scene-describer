@@ -77,6 +77,7 @@
     border: none;
     margin-top: 4px;
   }
+  .text-link-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 
   .toast {
     position: fixed;
@@ -180,6 +181,7 @@
     border-radius: 10px;
   }
   .relationship-btn.selected { border-color: #FFD400; color: #FFD400; background: #1a1600; }
+  .relationship-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 
   /* ---------- Bluetooth screen ---------- */
   .bt-card {
@@ -231,6 +233,7 @@
     border-radius: 10px;
   }
   .segmented button.selected { border-color: #FFD400; color: #FFD400; background: #1a1600; }
+  .segmented button:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
   .test-voice-btn {
     width: 100%;
     padding: 12px;
@@ -242,6 +245,7 @@
     border-radius: 10px;
     margin-top: 10px;
   }
+  .test-voice-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 
   /* ---------- Tutorial screen ---------- */
   .command-row {
@@ -288,11 +292,11 @@
     <h1>Who is this for?</h1>
     <p class="subtitle">This helps us tailor the experience to you. Say "visual" or "hearing", or tap a card.</p>
 
-    <button class="choice-card" id="profileVisualBtn" type="button">
+    <button class="choice-card" id="profileVisualBtn" type="button" aria-pressed="false">
       <div class="choice-title">I'm blind or visually impaired</div>
       <div class="choice-sub">Scene descriptions, text reading, voice-guided navigation</div>
     </button>
-    <button class="choice-card" id="profileHearingBtn" type="button">
+    <button class="choice-card" id="profileHearingBtn" type="button" aria-pressed="false">
       <div class="choice-title">I'm deaf or hard of hearing</div>
       <div class="choice-sub">Coming soon — not yet available</div>
     </button>
@@ -307,10 +311,10 @@
     <h1>Choose your language</h1>
     <p class="subtitle">You can mix languages any time while talking to the app — this just sets the app's own voice. Say "English" or "Kiswahili".</p>
 
-    <button class="choice-card" id="langEnBtn" type="button">
+    <button class="choice-card" id="langEnBtn" type="button" aria-pressed="false">
       <div class="choice-title">English</div>
     </button>
-    <button class="choice-card" id="langSwBtn" type="button">
+    <button class="choice-card" id="langSwBtn" type="button" aria-pressed="false">
       <div class="choice-title">Kiswahili</div>
     </button>
 
@@ -349,11 +353,11 @@
       <label for="personNameInput">Name</label>
       <input type="text" id="personNameInput" placeholder="e.g. Mum" />
 
-      <label>Relationship</label>
-      <div class="relationship-row" id="relationshipRow">
-        <button class="relationship-btn" data-rel="Friend" type="button">Friend</button>
-        <button class="relationship-btn" data-rel="Family" type="button">Family</button>
-        <button class="relationship-btn" data-rel="Coworker" type="button">Coworker</button>
+      <label id="relationshipLabel">Relationship</label>
+      <div class="relationship-row" id="relationshipRow" role="group" aria-labelledby="relationshipLabel">
+        <button class="relationship-btn" data-rel="Friend" type="button" aria-pressed="false">Friend</button>
+        <button class="relationship-btn" data-rel="Family" type="button" aria-pressed="false">Family</button>
+        <button class="relationship-btn" data-rel="Coworker" type="button" aria-pressed="false">Coworker</button>
       </div>
     </div>
 
@@ -369,8 +373,8 @@
     <p class="subtitle">Pair an earpiece so responses speak privately in your ear. Say "pair" or "skip".</p>
 
     <div class="bt-card">
-      <div class="bt-icon" id="btIcon">🎧</div>
-      <div class="bt-status-text" id="btStatusText">Not connected</div>
+      <div class="bt-icon" id="btIcon" aria-hidden="true">🎧</div>
+      <div class="bt-status-text" id="btStatusText" role="status" aria-live="polite">Not connected</div>
     </div>
 
     <button class="primary-btn" id="pairDeviceBtn" type="button">Pair a Device</button>
@@ -398,19 +402,19 @@
     </div>
 
     <div class="field-card">
-      <label>Notification Frequency</label>
-      <div class="segmented" id="notifSegmented">
-        <button data-value="off" type="button">Off</button>
-        <button data-value="normal" type="button">Normal</button>
-        <button data-value="frequent" type="button">Frequent</button>
+      <label id="notifSegmentedLabel">Notification Frequency</label>
+      <div class="segmented" id="notifSegmented" role="group" aria-labelledby="notifSegmentedLabel">
+        <button data-value="off" type="button" aria-pressed="false">Off</button>
+        <button data-value="normal" type="button" aria-pressed="true">Normal</button>
+        <button data-value="frequent" type="button" aria-pressed="false">Frequent</button>
       </div>
     </div>
 
     <div class="field-card">
-      <label>Preferred Language</label>
-      <div class="segmented" id="langSegmented">
-        <button data-value="en" type="button">English</button>
-        <button data-value="sw" type="button">Kiswahili</button>
+      <label id="langSegmentedLabel">Preferred Language</label>
+      <div class="segmented" id="langSegmented" role="group" aria-labelledby="langSegmentedLabel">
+        <button data-value="en" type="button" aria-pressed="false">English</button>
+        <button data-value="sw" type="button" aria-pressed="false">Kiswahili</button>
       </div>
     </div>
 
@@ -437,8 +441,8 @@
 
 </div>
 
-<div class="toast" id="toast"></div>
-<div class="voice-indicator" id="voiceIndicator">Listening…</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="voice-indicator" id="voiceIndicator" role="status" aria-live="polite">Listening…</div>
 
 <script>
   const appEl = document.getElementById('app');
@@ -818,7 +822,11 @@
       else if (matchesAny(heard, ['normal'])) notifValue = 'normal';
       if (notifValue) {
         state.notificationFrequency = notifValue;
-        notifSegmented.querySelectorAll('button').forEach(b => b.classList.toggle('selected', b.dataset.value === notifValue));
+        notifSegmented.querySelectorAll('button').forEach(b => {
+          const isSelected = b.dataset.value === notifValue;
+          b.classList.toggle('selected', isSelected);
+          b.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+        });
       }
 
       await speakAsync('Say continue, or tap Continue, to move on.');
@@ -861,7 +869,9 @@
   function selectProfileVisual() {
     state.profileType = 'visual';
     profileVisualBtn.classList.add('selected');
+    profileVisualBtn.setAttribute('aria-pressed', 'true');
     profileHearingBtn.classList.remove('selected');
+    profileHearingBtn.setAttribute('aria-pressed', 'false');
     profileNextBtn.disabled = false;
   }
 
@@ -879,10 +889,14 @@
   function selectLanguage(lang) {
     state.language = lang;
     langEnBtn.classList.toggle('selected', lang === 'en');
+    langEnBtn.setAttribute('aria-pressed', lang === 'en' ? 'true' : 'false');
     langSwBtn.classList.toggle('selected', lang === 'sw');
+    langSwBtn.setAttribute('aria-pressed', lang === 'sw' ? 'true' : 'false');
     languageNextBtn.disabled = false;
     document.querySelectorAll('#langSegmented button').forEach(b => {
-      b.classList.toggle('selected', b.dataset.value === lang);
+      const isSelected = b.dataset.value === lang;
+      b.classList.toggle('selected', isSelected);
+      b.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
     });
   }
   langEnBtn.addEventListener('click', () => selectLanguage('en'));
@@ -948,7 +962,10 @@
     selectedRelationship = null;
     photoStripEl.innerHTML = '';
     personNameInput.value = '';
-    relationshipRow.querySelectorAll('.relationship-btn').forEach(b => b.classList.remove('selected'));
+    relationshipRow.querySelectorAll('.relationship-btn').forEach(b => {
+      b.classList.remove('selected');
+      b.setAttribute('aria-pressed', 'false');
+    });
     updateSaveEnabled();
   }
 
@@ -984,8 +1001,12 @@
   relationshipRow.querySelectorAll('.relationship-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       selectedRelationship = btn.dataset.rel;
-      relationshipRow.querySelectorAll('.relationship-btn').forEach(b => b.classList.remove('selected'));
+      relationshipRow.querySelectorAll('.relationship-btn').forEach(b => {
+        b.classList.remove('selected');
+        b.setAttribute('aria-pressed', 'false');
+      });
       btn.classList.add('selected');
+      btn.setAttribute('aria-pressed', 'true');
       updateSaveEnabled();
     });
   });
@@ -1111,8 +1132,12 @@
   notifSegmented.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
       state.notificationFrequency = btn.dataset.value;
-      notifSegmented.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+      notifSegmented.querySelectorAll('button').forEach(b => {
+        b.classList.remove('selected');
+        b.setAttribute('aria-pressed', 'false');
+      });
       btn.classList.add('selected');
+      btn.setAttribute('aria-pressed', 'true');
     });
   });
   // Default-select "normal" to match state's initial value.
