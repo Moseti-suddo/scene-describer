@@ -522,7 +522,7 @@
   }
   .test-voice-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 
-  /* ---------- My People (SOS tab) ---------- */
+  /* ---------- My Circle (Connect tab) ---------- */
   .person-row {
     display: flex;
     align-items: center;
@@ -573,6 +573,80 @@
   .add-person-form input:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 1px; }
   .add-person-form-actions { display: flex; gap: 8px; }
   .add-person-form-actions button { margin-top: 0; flex: 1; }
+
+  /* ---------- Connect / My Circle / Community / Peer Support ---------- */
+  .text-link-btn {
+    position: relative;
+    z-index: 5;
+    display: block;
+    width: 100%;
+    padding: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    background: transparent;
+    color: #999;
+    border: none;
+    margin-top: 4px;
+  }
+  .text-link-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+  .connect-card {
+    position: relative;
+    z-index: 5;
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 20px;
+    margin-bottom: 14px;
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 14px;
+    color: #fff;
+  }
+  .connect-card-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .connect-card-sub { font-size: 14px; color: #999; }
+  .connect-card:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+
+  .circle-photo {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #222;
+    flex-shrink: 0;
+  }
+  .circle-photo-placeholder {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: #222;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .catalog-item {
+    background: #000;
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .catalog-item-title { color: #fff; font-weight: 700; font-size: 15px; }
+  .catalog-item-desc { color: #999; font-size: 13px; margin-top: 2px; }
+  .catalog-item-btn {
+    position: relative;
+    z-index: 5;
+    margin-top: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 8px;
+    border: 2px solid #444;
+    background: transparent;
+    color: #999;
+  }
+  .catalog-item-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -613,29 +687,10 @@
       </div>
     </div>
 
-    <div class="sos-card" style="text-align:left;">
-      <h2 style="margin:0 0 6px; font-size:17px; color:#fff;">My People</h2>
-      <p class="sos-help-text" style="margin-top:0;">
-        People you trust, for when you just want to talk — separate from your emergency contact above.
-      </p>
-      <div id="myPeopleList"></div>
-      <button class="secondary-link-btn" id="addPersonBtn" type="button">+ Add a person</button>
-
-      <div class="add-person-form" id="addPersonForm" style="display:none;">
-        <input type="text" id="personNameInput" placeholder="Name" aria-label="Person's name" aria-describedby="globalErrorText" />
-        <input type="text" id="personRelationshipInput" placeholder="Relationship (e.g. Sister, Friend)" aria-label="Relationship" />
-        <input type="tel" id="personPhoneInput" placeholder="Phone number" inputmode="numeric" aria-label="Person's phone number" aria-describedby="globalErrorText" />
-        <div class="add-person-form-actions">
-          <button class="secondary-link-btn" id="savePersonBtn" type="button">Save</button>
-          <button class="secondary-link-btn" id="cancelPersonBtn" type="button" style="border-color:#666; color:#999;">Cancel</button>
-        </div>
-      </div>
-    </div>
-
     <div class="sos-help-text">
       You can also long-press anywhere on the screen, or say "emergency" or "help me", to send an SOS at any time — from any screen.
       Say "did they confirm" to check if your contact has responded, or "is my contact confirmed" to check their setup status.
-      Say "I need someone to talk to" to reach someone from your My People list.
+      Say "call" or "message" followed by a name, or "open my circle", to reach someone from My Circle.
       <br /><br />
       Having trouble with the buttons or voice above? Use the
       <a href="/settings.html" style="color:#FFD400; font-weight:700;">plain settings page</a> instead.
@@ -777,10 +832,78 @@
     </div>
   </div>
 
+  <!-- ---------- Connect hub ---------- -->
+  <div class="view" id="connectView" role="tabpanel" aria-labelledby="tab-connect">
+    <h1>Connect</h1>
+    <button class="connect-card" id="openCircleBtn" type="button">
+      <div class="connect-card-title">My Circle</div>
+      <div class="connect-card-sub">People you trust — call or message them directly</div>
+    </button>
+    <button class="connect-card" id="openCommunityBtn" type="button">
+      <div class="connect-card-title">Community</div>
+      <div class="connect-card-sub">Preview — browse groups by interest (not yet connected)</div>
+    </button>
+    <button class="connect-card" id="openPeerSupportBtn" type="button">
+      <div class="connect-card-title">Peer Support</div>
+      <div class="connect-card-sub">Preview — talk with peers who share your experience (not yet connected)</div>
+    </button>
+    <p class="sos-help-text">
+      Say "call" or "message" followed by a name, "open my circle", "open community", or "open peer support", from any screen.
+    </p>
+  </div>
+
+  <!-- ---------- My Circle ---------- -->
+  <div class="view" id="circleView">
+    <button class="text-link-btn" id="circleBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
+    <h1>My Circle</h1>
+    <div id="circleList" role="status" aria-live="polite"></div>
+    <button class="secondary-link-btn" id="addCircleBtn" type="button">+ Add someone to My Circle</button>
+
+    <div class="add-person-form" id="addCircleForm" style="display:none;">
+      <input type="text" id="circleNameInput" placeholder="Name" aria-label="Name" aria-describedby="globalErrorText" />
+      <input type="text" id="circleRelationshipInput" placeholder="Relationship (e.g. Sister, Classmate, Mentor)" aria-label="Relationship" />
+      <input type="tel" id="circlePhoneInput" placeholder="Phone number" inputmode="numeric" aria-label="Phone number" aria-describedby="globalErrorText" />
+      <label for="circleFamiliarFaceSelect" style="color:#ccc;font-size:13px;">Link to a registered Familiar Face (optional)</label>
+      <select id="circleFamiliarFaceSelect">
+        <option value="">— None —</option>
+      </select>
+      <label for="circlePhotoInput" style="color:#ccc;font-size:13px;">Photo (optional)</label>
+      <input type="file" id="circlePhotoInput" accept="image/*" />
+      <div class="add-person-form-actions">
+        <button class="secondary-link-btn" id="saveCircleBtn" type="button">Save</button>
+        <button class="secondary-link-btn" id="cancelCircleBtn" type="button" style="border-color:#666; color:#999;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Community (preview only) ---------- -->
+  <div class="view" id="communityView">
+    <button class="text-link-btn" id="communityBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
+    <h1>Community</h1>
+    <div class="devices-honesty-note" style="margin-bottom:14px;">
+      Preview only. Community groups aren't connected to a real backend yet — no accounts,
+      no live members, no messages are sent here. This shows what will exist once that's built.
+    </div>
+    <div id="communityCatalogList"></div>
+  </div>
+
+  <!-- ---------- Peer Support (preview only) ---------- -->
+  <div class="view" id="peerSupportView">
+    <button class="text-link-btn" id="peerSupportBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
+    <h1>Peer Support</h1>
+    <div class="devices-honesty-note" style="margin-bottom:14px;">
+      Peer Support is for talking with people who may share your experience — it is not
+      professional therapy. Preview only: matching and real conversations aren't connected
+      to a backend yet.
+    </div>
+    <div id="peerSupportCatalogList"></div>
+  </div>
+
 </div>
 
 <nav class="navbar" id="navbar" role="tablist" aria-label="Main sections">
   <button class="nav-btn active" data-tab="home" role="tab" aria-selected="true" aria-controls="homeView" id="tab-home">Home</button>
+  <button class="nav-btn" data-tab="connect" role="tab" aria-selected="false" aria-controls="connectView" id="tab-connect">Connect</button>
   <button class="nav-btn" data-tab="sos" role="tab" aria-selected="false" aria-controls="sosView" id="tab-sos">SOS</button>
   <button class="nav-btn" data-tab="places" role="tab" aria-selected="false" aria-controls="placesView" id="tab-places">Places</button>
   <button class="nav-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devicesView" id="tab-devices">Devices</button>
@@ -806,14 +929,6 @@
   const changeContactBtn = document.getElementById('changeContactBtn');
   const manualContactInput = document.getElementById('manualContactInput');
   const manualContactSaveBtn = document.getElementById('manualContactSaveBtn');
-  const myPeopleListEl = document.getElementById('myPeopleList');
-  const addPersonBtn = document.getElementById('addPersonBtn');
-  const addPersonForm = document.getElementById('addPersonForm');
-  const personNameInput = document.getElementById('personNameInput');
-  const personRelationshipInput = document.getElementById('personRelationshipInput');
-  const personPhoneInput = document.getElementById('personPhoneInput');
-  const savePersonBtn = document.getElementById('savePersonBtn');
-  const cancelPersonBtn = document.getElementById('cancelPersonBtn');
   const placesView = document.getElementById('placesView');
   const savedPlacesListEl = document.getElementById('savedPlacesList');
   const newDestinationBtn = document.getElementById('newDestinationBtn');
@@ -837,6 +952,28 @@
   const settingsSpeedRange = document.getElementById('settingsSpeedRange');
   const settingsNotifSegmented = document.getElementById('settingsNotifSegmented');
   const settingsLangSegmented = document.getElementById('settingsLangSegmented');
+  const connectView = document.getElementById('connectView');
+  const circleView = document.getElementById('circleView');
+  const communityView = document.getElementById('communityView');
+  const peerSupportView = document.getElementById('peerSupportView');
+  const openCircleBtn = document.getElementById('openCircleBtn');
+  const openCommunityBtn = document.getElementById('openCommunityBtn');
+  const openPeerSupportBtn = document.getElementById('openPeerSupportBtn');
+  const circleBackBtn = document.getElementById('circleBackBtn');
+  const communityBackBtn = document.getElementById('communityBackBtn');
+  const peerSupportBackBtn = document.getElementById('peerSupportBackBtn');
+  const circleListEl = document.getElementById('circleList');
+  const addCircleBtn = document.getElementById('addCircleBtn');
+  const addCircleForm = document.getElementById('addCircleForm');
+  const circleNameInput = document.getElementById('circleNameInput');
+  const circleRelationshipInput = document.getElementById('circleRelationshipInput');
+  const circlePhoneInput = document.getElementById('circlePhoneInput');
+  const circleFamiliarFaceSelect = document.getElementById('circleFamiliarFaceSelect');
+  const circlePhotoInput = document.getElementById('circlePhotoInput');
+  const saveCircleBtn = document.getElementById('saveCircleBtn');
+  const cancelCircleBtn = document.getElementById('cancelCircleBtn');
+  const communityCatalogListEl = document.getElementById('communityCatalogList');
+  const peerSupportCatalogListEl = document.getElementById('peerSupportCatalogList');
 
   // ---------- Onboarding gate ----------
   // First-time users are sent through onboarding.html before ever reaching
@@ -914,26 +1051,6 @@
     faceRecognitionFailed: {
       en: 'Something went wrong checking for familiar faces.',
       sw: 'Hitilafu imetokea wakati wa kuangalia nyuso zinazojulikana.'
-    },
-    talkToSomeoneNoPeople: {
-      en: 'You have not added anyone to My People yet. You can add someone from the SOS tab.',
-      sw: 'Bado hujamweka mtu yeyote kwenye Watu Wangu. Unaweza kumweka mtu kutoka kwenye kichupo cha SOS.'
-    },
-    talkToSomeoneReachList: {
-      en: (names) => `You can reach: ${names}. Who would you like to call?`,
-      sw: (names) => `Unaweza kuwasiliana na: ${names}. Ungependa kupigia nani?`
-    },
-    talkToSomeoneDidntCatch: {
-      en: "I didn't catch that. You can also tap a name under My People in the SOS tab.",
-      sw: 'Sikuelewa hilo. Unaweza pia kugusa jina chini ya Watu Wangu kwenye kichupo cha SOS.'
-    },
-    talkToSomeoneNoMatch: {
-      en: "I couldn't match that to someone in your list. You can tap a name under My People in the SOS tab.",
-      sw: 'Sikuweza kulingana hilo na mtu kwenye orodha yako. Unaweza kugusa jina chini ya Watu Wangu kwenye kichupo cha SOS.'
-    },
-    talkToSomeoneCalling: {
-      en: (name) => `Calling ${name}.`,
-      sw: (name) => `Ninampigia ${name}.`
     },
     noContactSetLongPress: {
       en: 'No emergency contact is set. Long-press anywhere to set one now.',
@@ -1167,11 +1284,58 @@
   let pendingContactDigits = null;
   let activeSosId = null;
 
-  // ---------- My People state ----------
-  let myPeople = [];
+  // ---------- My Circle state (formerly "My People") ----------
+  // Kept separate from the emergency-contact system on purpose — this is
+  // for everyday human connection, not SOS. Migrates one-time from the
+  // older 'myPeople' key so nobody's existing contacts are lost.
+  let myCircle = [];
   try {
-    myPeople = JSON.parse(localStorage.getItem('myPeople') || '[]');
-  } catch (e) { myPeople = []; }
+    const existingCircle = localStorage.getItem('myCircle');
+    if (existingCircle) {
+      myCircle = JSON.parse(existingCircle);
+    } else {
+      const legacy = JSON.parse(localStorage.getItem('myPeople') || '[]');
+      myCircle = legacy.map(p => ({
+        id: p.id,
+        name: p.name,
+        relationship: p.relationship || '',
+        phone: p.phone,
+        photo: null,
+        linkedFaceIndex: null,
+        contactCount: 0,
+        lastContactedAt: null
+      }));
+      localStorage.setItem('myCircle', JSON.stringify(myCircle));
+    }
+  } catch (e) { myCircle = []; }
+
+  function saveMyCircle() {
+    localStorage.setItem('myCircle', JSON.stringify(myCircle));
+  }
+
+  // ---------- Community / Voice Rooms / Peer Support (static previews) ----------
+  // No backend exists for any of this yet — no accounts, no discovery, no
+  // realtime messaging or WebRTC. These are fixed, honest previews of the
+  // eventual shape (see spec sections 2-5), not live data.
+  const COMMUNITY_CATALOG = [
+    { name: 'University Students', desc: 'Education — connect with other students.' },
+    { name: 'Computer Science Students', desc: 'Education — study and career talk.' },
+    { name: 'Technology', desc: 'Career — tech industry discussion.' },
+    { name: 'Entrepreneurship', desc: 'Career — building and growing something.' },
+    { name: 'Music', desc: 'Interests — share and discuss music.' },
+    { name: 'Gaming', desc: 'Interests — accessible gaming discussion.' }
+  ];
+  const VOICE_ROOM_CATALOG = [
+    { name: 'University Life', desc: 'General student conversation.' },
+    { name: 'Getting Into Tech', desc: 'Breaking into a tech career.' },
+    { name: 'Accessibility & Independence', desc: 'Living independently as a blind or low-vision person.' }
+  ];
+  const PEER_SUPPORT_CATALOG = [
+    { name: 'Student Support', desc: 'Talk with other visually impaired students.' },
+    { name: 'Technology & Accessibility', desc: 'Talk with people who use assistive tech.' },
+    { name: 'Career Support', desc: 'Peers discussing employment and career growth.' },
+    { name: 'Daily Independence', desc: 'Practical experiences around independent living.' }
+  ];
 
   // ---------- Familiar Faces state (registered during onboarding) ----------
   // Used for the honest face-recognition stub below — this is the same
@@ -1302,6 +1466,17 @@
   const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed', 'je wamethibitisha', 'wanakuja'];
   const CONTACT_STATUS_KEYWORDS = ['is my contact confirmed', 'check my contact', 'contact status', 'is my contact set up', 'je mtu wangu wa dharura amethibitishwa', 'hali ya mtu wangu wa dharura'];
   const TALK_TO_SOMEONE_KEYWORDS = ['someone to talk to', 'talk to someone', "don't want to be alone", 'dont want to be alone', 'i need to talk', 'nataka kuongea na mtu', 'sitaki kuwa peke yangu'];
+  const OPEN_CIRCLE_KEYWORDS = ['open my circle', 'open circle', 'my circle'];
+  const WHO_IN_CIRCLE_KEYWORDS = ['who is in my circle', "who's in my circle", 'whos in my circle'];
+  const OPEN_COMMUNITY_KEYWORDS = ['open community', 'find a community', 'find communities', 'browse communities'];
+  const OPEN_PEER_SUPPORT_KEYWORDS = ['open peer support', 'find a peer', 'find peer support', 'peer support'];
+  // Deliberately "who's in the room" — NOT "who's here", which is already
+  // owned by face recognition (FACE_RECOGNITION_KEYWORDS above).
+  const WHO_IN_ROOM_KEYWORDS = ["who's in the room", 'who is in the room', 'who is in this room'];
+  const VOICE_ROOM_JOIN_KEYWORDS = ['join the', 'join room', 'join voice room'];
+  const CALL_NAME_PREFIXES = ['call '];
+  const MESSAGE_NAME_PREFIXES = ['message ', 'text '];
+  const GO_BACK_KEYWORDS = ['go back', 'back to connect', 'rudi nyuma'];
   // "who's here" vs "what's here": kept as a visually distinct list (not
   // merged into DESCRIBE_KEYWORDS) since they trigger genuinely different
   // features — face recognition vs. scene description — even though a
@@ -1448,6 +1623,7 @@
   }
 
   // ---------- Tabs ----------
+  const CONNECT_SUBTABS = ['connect', 'circle', 'community', 'peerSupport'];
   function setTab(tab) {
     currentTab = tab;
     homeView.classList.toggle('active', tab === 'home');
@@ -1455,14 +1631,21 @@
     placesView.classList.toggle('active', tab === 'places');
     devicesView.classList.toggle('active', tab === 'devices');
     settingsView.classList.toggle('active', tab === 'settings');
+    connectView.classList.toggle('active', tab === 'connect');
+    circleView.classList.toggle('active', tab === 'circle');
+    communityView.classList.toggle('active', tab === 'community');
+    peerSupportView.classList.toggle('active', tab === 'peerSupport');
     document.querySelectorAll('.nav-btn').forEach(b => {
-      const isSelected = b.dataset.tab === tab;
+      const isConnectFamily = CONNECT_SUBTABS.includes(tab) && b.dataset.tab === 'connect';
+      const isSelected = b.dataset.tab === tab || isConnectFamily;
       b.classList.toggle('active', isSelected);
       b.setAttribute('aria-selected', isSelected ? 'true' : 'false');
     });
+    if (tab === 'circle') renderCircleScreen();
+    if (tab === 'community') renderCommunityScreen();
+    if (tab === 'peerSupport') renderPeerSupportScreen();
     if (tab === 'sos') {
       renderSosScreen();
-      renderMyPeopleList();
       if (emergencyContact && !emergencyContact.confirmed) {
         checkContactConfirmation({ speakResult: false });
       }
@@ -1497,126 +1680,228 @@
     contactStatusEl.textContent = `Emergency contact: ${spacedDigits(emergencyContact.phone)} (${confirmLabel})`;
   }
 
-  // ---------- My People (SOS tab) ----------
-  function saveMyPeople() {
-    localStorage.setItem('myPeople', JSON.stringify(myPeople));
-  }
-
-  function renderMyPeopleList() {
-    if (!myPeople.length) {
-      myPeopleListEl.innerHTML = '<div class="no-people-text">No trusted contacts added yet.</div>';
+  // ---------- My Circle rendering + actions ----------
+  function renderCircleScreen() {
+    if (!myCircle.length) {
+      circleListEl.innerHTML = '<div class="no-people-text">No one in your circle yet.</div>';
       return;
     }
-    myPeopleListEl.innerHTML = '';
-    myPeople.forEach(person => {
+    const sorted = [...myCircle].sort((a, b) =>
+      (b.contactCount - a.contactCount) || ((b.lastContactedAt || 0) - (a.lastContactedAt || 0))
+    );
+    circleListEl.innerHTML = '';
+    sorted.forEach(person => {
       const row = document.createElement('div');
       row.className = 'person-row';
+      const photoHtml = person.photo
+        ? `<img class="circle-photo" src="${person.photo}" alt="" />`
+        : `<div class="circle-photo-placeholder">${(person.name || '?').charAt(0).toUpperCase()}</div>`;
       const relText = person.relationship ? ` (${person.relationship})` : '';
       row.innerHTML = `
+        ${photoHtml}
         <div class="person-info">
           <div class="person-name">${person.name}${relText}</div>
         </div>
         <div class="person-actions">
           <button class="person-action-btn" data-id="${person.id}" data-action="call" type="button">Call</button>
-          <button class="person-action-btn" data-id="${person.id}" data-action="text" type="button">Text</button>
+          <button class="person-action-btn" data-id="${person.id}" data-action="text" type="button">Message</button>
           <button class="person-action-btn remove" data-id="${person.id}" data-action="remove" type="button">Remove</button>
         </div>
       `;
-      myPeopleListEl.appendChild(row);
+      circleListEl.appendChild(row);
     });
   }
 
-  function resetAddPersonForm() {
-    personNameInput.value = '';
-    personRelationshipInput.value = '';
-    personPhoneInput.value = '';
+  function recordCircleContact(person) {
+    person.contactCount = (person.contactCount || 0) + 1;
+    person.lastContactedAt = Date.now();
+    saveMyCircle();
   }
 
-  addPersonBtn.addEventListener('click', (e) => {
+  function callCirclePerson(person) {
+    recordCircleContact(person);
+    window.location.href = `tel:${person.phone}`;
+  }
+
+  function messageCirclePerson(person) {
+    recordCircleContact(person);
+    const message = `Hi ${person.name}, just wanted to talk when you have a moment.`;
+    window.location.href = `sms:${person.phone}?body=${encodeURIComponent(message)}`;
+  }
+
+  function populateFamiliarFaceSelect() {
+    circleFamiliarFaceSelect.innerHTML = '<option value="">— None —</option>';
+    familiarFaces.forEach((f, i) => {
+      const opt = document.createElement('option');
+      opt.value = String(i);
+      opt.textContent = `${f.name}${f.relationship ? ' (' + f.relationship + ')' : ''}`;
+      circleFamiliarFaceSelect.appendChild(opt);
+    });
+  }
+
+  function resetCircleForm() {
+    circleNameInput.value = '';
+    circleRelationshipInput.value = '';
+    circlePhoneInput.value = '';
+    circlePhotoInput.value = '';
+    circleFamiliarFaceSelect.value = '';
+  }
+
+  openCircleBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('circle'); });
+  openCommunityBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('community'); });
+  openPeerSupportBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('peerSupport'); });
+  circleBackBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('connect'); });
+  communityBackBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('connect'); });
+  peerSupportBackBtn.addEventListener('click', (e) => { e.stopPropagation(); setTab('connect'); });
+
+  addCircleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const isHidden = addPersonForm.style.display === 'none';
-    addPersonForm.style.display = isHidden ? 'flex' : 'none';
-    if (isHidden) personNameInput.focus();
+    const isHidden = addCircleForm.style.display === 'none';
+    addCircleForm.style.display = isHidden ? 'flex' : 'none';
+    if (isHidden) { populateFamiliarFaceSelect(); circleNameInput.focus(); }
   });
 
-  cancelPersonBtn.addEventListener('click', (e) => {
+  cancelCircleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    resetAddPersonForm();
-    addPersonForm.style.display = 'none';
+    resetCircleForm();
+    addCircleForm.style.display = 'none';
   });
 
-  savePersonBtn.addEventListener('click', (e) => {
+  circleFamiliarFaceSelect.addEventListener('change', () => {
+    const idx = circleFamiliarFaceSelect.value;
+    if (idx === '') return;
+    const face = familiarFaces[Number(idx)];
+    if (!face) return;
+    if (!circleNameInput.value.trim()) circleNameInput.value = face.name || '';
+    if (!circleRelationshipInput.value.trim()) circleRelationshipInput.value = face.relationship || '';
+  });
+
+  let pendingCirclePhotoDataUrl = null;
+  circlePhotoInput.addEventListener('change', () => {
+    pendingCirclePhotoDataUrl = null;
+    const file = circlePhotoInput.files && circlePhotoInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { pendingCirclePhotoDataUrl = reader.result; };
+    reader.readAsDataURL(file);
+  });
+
+  saveCircleBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     setError('');
-    const name = (personNameInput.value || '').trim();
-    const relationship = (personRelationshipInput.value || '').trim();
-    const digits = (personPhoneInput.value || '').replace(/\D/g, '');
+    const name = (circleNameInput.value || '').trim();
+    const relationship = (circleRelationshipInput.value || '').trim();
+    const digits = (circlePhoneInput.value || '').replace(/\D/g, '');
+    const faceIdx = circleFamiliarFaceSelect.value === '' ? null : Number(circleFamiliarFaceSelect.value);
 
-    if (!name) {
-      setError('Enter a name.');
-      return;
-    }
-    if (!digits || digits.length < 7) {
-      setError('Enter a valid phone number (7+ digits).');
-      return;
-    }
+    if (!name) { setError('Enter a name.'); return; }
+    if (!digits || digits.length < 7) { setError('Enter a valid phone number (7+ digits).'); return; }
 
-    myPeople.push({
-      id: (crypto.randomUUID ? crypto.randomUUID() : 'person-' + Date.now() + '-' + Math.random().toString(16).slice(2)),
+    myCircle.push({
+      id: (crypto.randomUUID ? crypto.randomUUID() : 'circle-' + Date.now() + '-' + Math.random().toString(16).slice(2)),
       name,
       relationship,
-      phone: digits
+      phone: digits,
+      photo: pendingCirclePhotoDataUrl || null,
+      linkedFaceIndex: faceIdx,
+      contactCount: 0,
+      lastContactedAt: null
     });
-    saveMyPeople();
-    renderMyPeopleList();
-    resetAddPersonForm();
-    addPersonForm.style.display = 'none';
+    saveMyCircle();
+    renderCircleScreen();
+    resetCircleForm();
+    pendingCirclePhotoDataUrl = null;
+    addCircleForm.style.display = 'none';
   });
 
-  myPeopleListEl.addEventListener('click', (e) => {
+  circleListEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.person-action-btn');
     if (!btn) return;
     e.stopPropagation();
-
-    const person = myPeople.find(p => p.id === btn.dataset.id);
+    const person = myCircle.find(p => p.id === btn.dataset.id);
     if (!person) return;
-
-    if (btn.dataset.action === 'call') {
-      window.location.href = `tel:${person.phone}`;
-    } else if (btn.dataset.action === 'text') {
-      const message = `Hi ${person.name}, just wanted to talk when you have a moment.`;
-      window.location.href = `sms:${person.phone}?body=${encodeURIComponent(message)}`;
-    } else if (btn.dataset.action === 'remove') {
-      myPeople = myPeople.filter(p => p.id !== person.id);
-      saveMyPeople();
-      renderMyPeopleList();
+    if (btn.dataset.action === 'call') callCirclePerson(person);
+    else if (btn.dataset.action === 'text') messageCirclePerson(person);
+    else if (btn.dataset.action === 'remove') {
+      myCircle = myCircle.filter(p => p.id !== person.id);
+      saveMyCircle();
+      renderCircleScreen();
     }
   });
 
-  async function handleTalkToSomeoneIntent() {
-    if (!myPeople.length) {
-      await speakAsync(t('talkToSomeoneNoPeople'));
-      return;
+  // Matches a spoken name or "my <relationship>" phrase against My Circle.
+  // Returns an array — 0 (no match), 1 (unambiguous), or 2+ (needs
+  // disambiguation). Never guesses when there's more than one match.
+  function findCircleMatches(rawQuery) {
+    const q = (rawQuery || '').trim().toLowerCase();
+    if (!q) return [];
+    const relMatch = q.match(/^my (.+)$/);
+    if (relMatch) {
+      const rel = relMatch[1].trim();
+      return myCircle.filter(p => (p.relationship || '').toLowerCase().includes(rel));
     }
-    const names = myPeople.map(p => p.name).join(', ');
-    await speakAsync(t('talkToSomeoneReachList', names));
-
-    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
-    if (!heard) {
-      await speakAsync(t('talkToSomeoneDidntCatch'));
-      return;
-    }
-
-    const lower = heard.toLowerCase();
-    const match = myPeople.find(p => lower.includes(p.name.toLowerCase()));
-    if (!match) {
-      await speakAsync(t('talkToSomeoneNoMatch'));
-      return;
-    }
-
-    await speakAsync(t('talkToSomeoneCalling', match.name));
-    window.location.href = `tel:${match.phone}`;
+    return myCircle.filter(p => p.name.toLowerCase().includes(q));
   }
+
+  async function resolveCirclePersonByVoice(rawQuery) {
+    const matches = findCircleMatches(rawQuery);
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
+
+    const names = matches.map(p => `${p.name}${p.relationship ? ', your ' + p.relationship : ''}`).join(', and ');
+    await speakAsync(`You have ${matches.length} matches: ${names}. Which one?`);
+    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+    if (!heard) return null;
+    const lower = heard.toLowerCase();
+    return matches.find(p => lower.includes(p.name.toLowerCase())) || null;
+  }
+
+  async function handleCircleCallOrMessageIntent(rawText, action) {
+    const match = await resolveCirclePersonByVoice(rawText);
+    if (!match) {
+      await speakAsync(`I couldn't find that in your circle. Say "open my circle" to see who's saved.`);
+      return;
+    }
+    if (action === 'call') {
+      await speakAsync(`Calling ${match.name}.`);
+      callCirclePerson(match);
+    } else {
+      await speakAsync(`Messaging ${match.name}.`);
+      messageCirclePerson(match);
+    }
+  }
+
+  async function speakMyCircleList() {
+    if (!myCircle.length) {
+      await speakAsync('Your circle is empty. Say "open my circle" to add someone.');
+      return;
+    }
+    const names = myCircle.map(p => `${p.name}${p.relationship ? ', your ' + p.relationship : ''}`).join(', ');
+    await speakAsync(`In your circle: ${names}.`);
+  }
+
+  // ---------- Community / Peer Support rendering (static previews) ----------
+  function renderCatalogList(container, catalog, kind) {
+    container.innerHTML = '';
+    catalog.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'catalog-item';
+      el.innerHTML = `
+        <div class="catalog-item-title">${item.name}</div>
+        <div class="catalog-item-desc">${item.desc}</div>
+        <button class="catalog-item-btn" type="button">Join (coming soon)</button>
+      `;
+      el.querySelector('.catalog-item-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        setError('');
+        speakAsync(`${item.name} isn't connected to a real ${kind} backend yet — this is a preview of what's coming.`);
+      });
+      container.appendChild(el);
+    });
+  }
+
+  function renderCommunityScreen() { renderCatalogList(communityCatalogListEl, COMMUNITY_CATALOG, 'community'); }
+  function renderPeerSupportScreen() { renderCatalogList(peerSupportCatalogListEl, PEER_SUPPORT_CATALOG, 'peer support'); }
 
   // ---------- Familiar Faces (honest recognition stub) ----------
   // There is no computer-vision/face-matching backend connected yet — see
@@ -2823,8 +3108,50 @@
         resetToIdle();
         return;
       }
-      if (TALK_TO_SOMEONE_KEYWORDS.some(k => lower.includes(k))) {
-        await handleTalkToSomeoneIntent();
+      if (TALK_TO_SOMEONE_KEYWORDS.some(k => lower.includes(k)) || OPEN_CIRCLE_KEYWORDS.some(k => lower.includes(k))) {
+        setTab('circle');
+        await speakAsync('Opening My Circle.');
+        resetToIdle();
+        return;
+      }
+      if (WHO_IN_CIRCLE_KEYWORDS.some(k => lower.includes(k))) {
+        await speakMyCircleList();
+        resetToIdle();
+        return;
+      }
+      if (OPEN_COMMUNITY_KEYWORDS.some(k => lower.includes(k))) {
+        setTab('community');
+        await speakAsync('Community is a preview — not connected to a real backend yet.');
+        resetToIdle();
+        return;
+      }
+      if (OPEN_PEER_SUPPORT_KEYWORDS.some(k => lower.includes(k))) {
+        setTab('peerSupport');
+        await speakAsync('Peer Support is a preview — not connected to a real backend yet.');
+        resetToIdle();
+        return;
+      }
+      if (WHO_IN_ROOM_KEYWORDS.some(k => lower.includes(k)) || VOICE_ROOM_JOIN_KEYWORDS.some(k => lower.includes(k)) || lower.includes('mute me') || lower.includes('unmute me')) {
+        await speakAsync("Voice rooms aren't connected to live calling yet — this is a preview of what's coming.");
+        resetToIdle();
+        return;
+      }
+      if (GO_BACK_KEYWORDS.some(k => lower.includes(k))) {
+        setTab(CONNECT_SUBTABS.includes(currentTab) && currentTab !== 'connect' ? 'connect' : 'home');
+        resetToIdle();
+        return;
+      }
+      const callPrefix = CALL_NAME_PREFIXES.find(p => lower.startsWith(p));
+      if (callPrefix && !EMERGENCY_KEYWORDS.some(k => lower.includes(k)) && !CALL_KEYWORDS.some(k => lower.includes(k))) {
+        const query = speechText.slice(callPrefix.length).trim();
+        await handleCircleCallOrMessageIntent(query, 'call');
+        resetToIdle();
+        return;
+      }
+      const messagePrefix = MESSAGE_NAME_PREFIXES.find(p => lower.startsWith(p));
+      if (messagePrefix) {
+        const query = speechText.slice(messagePrefix.length).trim();
+        await handleCircleCallOrMessageIntent(query, 'message');
         resetToIdle();
         return;
       }
@@ -2962,7 +3289,7 @@
   }
 
   renderSosScreen();
-  renderMyPeopleList();
+  renderCircleScreen();
   renderPlacesScreen();
   renderDevicesScreen();
   renderSettingsScreen();
