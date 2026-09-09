@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Scene Describer</title>
+<title>Ona</title>
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2/dist/tabler-icons.min.css">
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -198,13 +199,28 @@
     background: transparent;
     border: none;
     color: #888;
-    font-size: 14px;
+    font-size: 11px;
     font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 2px 6px;
+  }
+  .nav-icon-pill {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 5px 14px;
+    border-radius: 10px;
+    font-size: 20px;
+    line-height: 1;
+    color: inherit;
   }
   .nav-btn.active { color: #FFD400; }
+  .nav-btn.active .nav-icon-pill { background: #2a2400; }
+  .nav-btn[data-tab="sos"] .nav-icon-pill { color: #FF6B6B; }
   .nav-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: -3px; }
 
   .sr-only {
@@ -364,6 +380,18 @@
     padding: 18px;
     margin-top: 8px;
     margin-bottom: 14px;
+  }
+  .device-icon-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 2px solid #FFD400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFD400;
+    font-size: 22px;
+    margin-bottom: 12px;
   }
   .device-card-top {
     display: flex;
@@ -659,7 +687,7 @@
 <div id="app">
 
   <div class="view active" id="homeView" role="tabpanel" aria-labelledby="tab-home">
-    <h1>Scene Describer</h1>
+    <h1>Ona</h1>
 
     <div class="video-frame">
       <video id="video" autoplay playsinline muted aria-hidden="true"></video>
@@ -730,6 +758,7 @@
     <h1>Devices</h1>
 
     <div class="device-card" id="deviceCard-glasses">
+      <div class="device-icon-badge" aria-hidden="true"><i class="ti ti-glasses"></i></div>
       <div class="device-card-top">
         <div class="device-name">Smart Glasses</div>
         <div class="device-status-pill" id="deviceStatusPill-glasses">Not connected</div>
@@ -739,6 +768,7 @@
     </div>
 
     <div class="device-card" id="deviceCard-cane">
+      <div class="device-icon-badge" aria-hidden="true"><i class="ti ti-walk"></i></div>
       <div class="device-card-top">
         <div class="device-name">Smart Cane</div>
         <div class="device-status-pill" id="deviceStatusPill-cane">Not connected</div>
@@ -748,6 +778,7 @@
     </div>
 
     <div class="device-card" id="deviceCard-wrist">
+      <div class="device-icon-badge" aria-hidden="true"><i class="ti ti-device-watch"></i></div>
       <div class="device-card-top">
         <div class="device-name">Wrist Band</div>
         <div class="device-status-pill" id="deviceStatusPill-wrist">Not connected</div>
@@ -757,7 +788,7 @@
     </div>
 
     <div class="devices-honesty-note">
-      This screen simulates pairing with Scene Describer hardware accessories. Compatible glasses, cane, and wrist band hardware don't exist yet, so no real Bluetooth connection is made here — this shows how device pairing and status will work once that hardware is built.
+      This screen simulates pairing with Ona hardware accessories. Compatible glasses, cane, and wrist band hardware don't exist yet, so no real Bluetooth connection is made here — this shows how device pairing and status will work once that hardware is built.
     </div>
   </div>
 
@@ -918,12 +949,30 @@
 </div>
 
 <nav class="navbar" id="navbar" role="tablist" aria-label="Main sections">
-  <button class="nav-btn active" data-tab="home" role="tab" aria-selected="true" aria-controls="homeView" id="tab-home">Home</button>
-  <button class="nav-btn" data-tab="connect" role="tab" aria-selected="false" aria-controls="connectView" id="tab-connect">Connect</button>
-  <button class="nav-btn" data-tab="sos" role="tab" aria-selected="false" aria-controls="sosView" id="tab-sos">SOS</button>
-  <button class="nav-btn" data-tab="places" role="tab" aria-selected="false" aria-controls="placesView" id="tab-places">Places</button>
-  <button class="nav-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devicesView" id="tab-devices">Devices</button>
-  <button class="nav-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="settingsView" id="tab-settings">Settings</button>
+  <button class="nav-btn active" data-tab="home" role="tab" aria-selected="true" aria-controls="homeView" id="tab-home">
+    <span class="nav-icon-pill"><i class="ti ti-home" aria-hidden="true"></i></span>
+    <span>Home</span>
+  </button>
+  <button class="nav-btn" data-tab="connect" role="tab" aria-selected="false" aria-controls="connectView" id="tab-connect">
+    <span class="nav-icon-pill"><i class="ti ti-users" aria-hidden="true"></i></span>
+    <span>Connect</span>
+  </button>
+  <button class="nav-btn" data-tab="sos" role="tab" aria-selected="false" aria-controls="sosView" id="tab-sos">
+    <span class="nav-icon-pill"><i class="ti ti-alert-triangle" aria-hidden="true"></i></span>
+    <span>SOS</span>
+  </button>
+  <button class="nav-btn" data-tab="places" role="tab" aria-selected="false" aria-controls="placesView" id="tab-places">
+    <span class="nav-icon-pill"><i class="ti ti-map-pin" aria-hidden="true"></i></span>
+    <span>Places</span>
+  </button>
+  <button class="nav-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devicesView" id="tab-devices">
+    <span class="nav-icon-pill"><i class="ti ti-device-watch" aria-hidden="true"></i></span>
+    <span>Devices</span>
+  </button>
+  <button class="nav-btn" data-tab="settings" role="tab" aria-selected="false" aria-controls="settingsView" id="tab-settings">
+    <span class="nav-icon-pill"><i class="ti ti-settings" aria-hidden="true"></i></span>
+    <span>Settings</span>
+  </button>
 </nav>
 
 <script>
@@ -1410,9 +1459,9 @@
 
   // ---------- Devices state ----------
   const DEVICE_DEFS = {
-    glasses: { label: 'Smart Glasses', simulatedName: 'AuraSense Glasses' },
-    cane: { label: 'Smart Cane', simulatedName: 'AuraSense Cane' },
-    wrist: { label: 'Wrist Band', simulatedName: 'AuraSense Band' }
+    glasses: { label: 'Smart Glasses', simulatedName: 'Ona Glasses' },
+    cane: { label: 'Smart Cane', simulatedName: 'Ona Cane' },
+    wrist: { label: 'Wrist Band', simulatedName: 'Ona Band' }
   };
 
   let pairedDevices = {};
@@ -2574,7 +2623,7 @@
     }
 
     const inviteLink = `${window.location.origin}/join.html?owner=${encodeURIComponent(ownerId)}`;
-    const inviteMessage = `You've been added as an emergency contact on Scene Describer. Tap to finish setup: ${inviteLink}`;
+    const inviteMessage = `You've been added as an emergency contact on Ona. Tap to finish setup: ${inviteLink}`;
     window.location.href = `sms:${digits}?body=${encodeURIComponent(inviteMessage)}`;
   }
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Welcome — Scene Describer</title>
+<title>Welcome — Ona</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -11,9 +11,11 @@
     background: #000; color: #FFD400;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     height: 100%;
+    overflow-y: auto;
   }
   #app {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     padding: 24px 20px 32px;
@@ -275,11 +277,10 @@
   <!-- Step 0: Welcome -->
   <div class="step active" id="step-welcome">
     <div class="spacer"></div>
-    <h1>Welcome to Scene Describer</h1>
+    <h1>Welcome to Ona</h1>
     <p class="subtitle">
-      An accessibility companion that describes your surroundings, reads
-      text aloud, helps you navigate, and keeps you connected to help when
-      you need it. Let's set things up. You can say what you want any time,
+      Your world, made more accessible through voice, AI, and human
+      connection. Let's set things up. You can say what you want any time,
       or just tap the buttons.
     </p>
     <div class="spacer"></div>
@@ -674,7 +675,7 @@
     const stale = () => token !== activeStepToken;
 
     if (id === 'welcome') {
-      await speakAsync("Welcome to Scene Describer. An accessibility companion that describes your surroundings, reads text aloud, helps you navigate, and keeps you connected to help when you need it. Say get started, or tap Get Started, to begin.");
+      await speakAsync("Welcome to Ona. Your world, made more accessible through voice, AI, and human connection. Let's set things up. You can say what you want any time, or just tap the buttons. Say get started, or tap Get Started, to begin.");
       const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
       if (stale()) return;
       if (matchesAny(heard, ['get started', 'start', 'continue', 'begin'])) {
@@ -1042,7 +1043,7 @@
   const bluetoothNextBtn = document.getElementById('bluetoothNextBtn');
   const bluetoothSkipBtn = document.getElementById('bluetoothSkipBtn');
 
-  const MOCK_DEVICE_NAME = 'AuraSense EarBuds';
+  const MOCK_DEVICE_NAME = 'Ona EarBuds';
 
   function runBluetoothMock() {
     pairDeviceBtn.disabled = true;
