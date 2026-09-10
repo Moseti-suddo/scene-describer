@@ -31,6 +31,10 @@
     letter-spacing: 0.5px;
     margin-bottom: 18px;
   }
+  /* h1 and .progress-text (for the one step without an h1) get
+     tabindex="-1" so goToStep() can move screen-reader focus to them —
+     never reachable via Tab key or mouse click, so no visible ring needed. */
+  h1:focus, .progress-text:focus { outline: none; }
 
   h1 { font-size: 24px; margin: 0 0 8px; text-align: center; }
   .subtitle { color: #ccc; font-size: 16px; line-height: 1.5; text-align: center; margin: 0 0 24px; }
@@ -277,7 +281,7 @@
   <!-- Step 0: Welcome -->
   <div class="step active" id="step-welcome">
     <div class="spacer"></div>
-    <h1>Welcome to Ona</h1>
+    <h1 tabindex="-1">Welcome to Ona</h1>
     <p class="subtitle">
       Your world, made more accessible through voice, AI, and human
       connection. Let's set things up. You can say what you want any time,
@@ -290,7 +294,7 @@
   <!-- Step 1: Profile type -->
   <div class="step" id="step-profile">
     <div class="progress-text">STEP 1 OF 6</div>
-    <h1>Who is this for?</h1>
+    <h1 tabindex="-1">Who is this for?</h1>
     <p class="subtitle">This helps us tailor the experience to you. Say "visual" or "hearing", or tap a card.</p>
 
     <button class="choice-card" id="profileVisualBtn" type="button" aria-pressed="false">
@@ -309,7 +313,7 @@
   <!-- Step 2: Language -->
   <div class="step" id="step-language">
     <div class="progress-text">STEP 2 OF 6</div>
-    <h1>Choose your language</h1>
+    <h1 tabindex="-1">Choose your language</h1>
     <p class="subtitle">You can mix languages any time while talking to the app — this just sets the app's own voice. Say "English" or "Kiswahili".</p>
 
     <button class="choice-card" id="langEnBtn" type="button" aria-pressed="false">
@@ -326,7 +330,7 @@
   <!-- Step 3: Register familiar faces (list view) -->
   <div class="step" id="step-faces">
     <div class="progress-text">STEP 3 OF 6</div>
-    <h1>Register Familiar Faces</h1>
+    <h1 tabindex="-1">Register Familiar Faces</h1>
     <p class="subtitle">Add people close to you now, for faster recognition later. Fully optional. Say "add a person" or "skip".</p>
 
     <div class="face-list" id="faceList"></div>
@@ -342,7 +346,7 @@
 
   <!-- Step 3b: Add person sub-flow -->
   <div class="step" id="step-add-face">
-    <div class="progress-text">ADD A PERSON</div>
+    <div class="progress-text" tabindex="-1">ADD A PERSON</div>
     <div class="video-frame">
       <video id="faceVideo" autoplay playsinline muted></video>
       <canvas id="faceCanvas"></canvas>
@@ -370,7 +374,7 @@
   <!-- Step 4: Bluetooth pairing -->
   <div class="step" id="step-bluetooth">
     <div class="progress-text">STEP 4 OF 6</div>
-    <h1>Connect a Bluetooth Device</h1>
+    <h1 tabindex="-1">Connect a Bluetooth Device</h1>
     <p class="subtitle">Pair an earpiece so responses speak privately in your ear. Say "pair" or "skip".</p>
 
     <div class="bt-card">
@@ -388,7 +392,7 @@
   <!-- Step 5: Personalization -->
   <div class="step" id="step-personalize">
     <div class="progress-text">STEP 5 OF 6</div>
-    <h1>Personalize Your Experience</h1>
+    <h1 tabindex="-1">Personalize Your Experience</h1>
 
     <div class="field-card">
       <label for="voiceSelect">AI Voice</label>
@@ -426,7 +430,7 @@
   <!-- Step 6: Voice tutorial -->
   <div class="step" id="step-tutorial">
     <div class="progress-text">STEP 6 OF 6</div>
-    <h1>Voice Commands</h1>
+    <h1 tabindex="-1">Voice Commands</h1>
     <p class="subtitle">Double-tap anywhere to talk. Here's what you can say:</p>
 
     <div class="command-row"><div class="phrase">"Describe what's around me"</div><div class="desc">Get a fresh description of your surroundings</div></div>
@@ -668,6 +672,14 @@
     activeStepToken += 1;
     const myToken = activeStepToken;
     steps.forEach(s => document.getElementById('step-' + s).classList.toggle('active', s === id));
+
+    // Without this, a screen-reader user has no way of knowing the step
+    // changed — TalkBack/VoiceOver keeps its focus on whatever button was
+    // just pressed, which is now hidden inside an inactive step.
+    const stepEl = document.getElementById('step-' + id);
+    const focusTarget = stepEl && (stepEl.querySelector('h1') || stepEl.querySelector('.progress-text'));
+    if (focusTarget) focusTarget.focus({ preventScroll: true });
+
     runStepVoice(id, myToken);
   }
 

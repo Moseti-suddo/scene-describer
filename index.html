@@ -37,6 +37,10 @@
     margin: 4px 0 12px;
     letter-spacing: 0.5px;
   }
+  /* Headings get tabindex="-1" so setTab() can move screen-reader focus to
+     them on tab switch — never reachable via Tab key or mouse click, so no
+     visible focus ring is needed here. */
+  h1:focus { outline: none; }
   .video-frame {
     position: relative;
     width: 100%;
@@ -85,6 +89,31 @@
     margin-top: 8px;
     font-weight: 600;
   }
+
+  /* Direct-action buttons: a no-voice-required path to the same actions as
+     double-tap, for screen-reader users, noisy environments, or anyone who
+     just prefers not to speak commands. Sit below the camera frame,
+     always visible — large touch targets, no gesture or timing required. */
+  .direct-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .direct-action-btn {
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    padding: 16px;
+    font-size: 16px;
+    font-weight: 700;
+    background: #111;
+    color: #FFD400;
+    border: 2px solid #FFD400;
+    border-radius: 12px;
+  }
+  .direct-action-btn:disabled { opacity: 0.5; }
+  .direct-action-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 
   .error {
     color: #FF6B6B;
@@ -687,7 +716,7 @@
 <div id="app">
 
   <div class="view active" id="homeView" role="tabpanel" aria-labelledby="tab-home">
-    <h1>Ona</h1>
+    <h1 tabindex="-1">Ona</h1>
 
     <div class="video-frame">
       <video id="video" autoplay playsinline muted aria-hidden="true"></video>
@@ -700,10 +729,16 @@
     <div class="error" id="error" role="alert"></div>
 
     <div class="tap-hint" id="tapHint">Double-tap anywhere to begin</div>
+
+    <div class="direct-actions">
+      <button class="direct-action-btn" id="describeSceneBtn" type="button">Describe my surroundings</button>
+      <button class="direct-action-btn" id="readTextBtn" type="button">Read text or sign</button>
+      <button class="direct-action-btn" id="hazardCheckBtn" type="button">Check for hazards ahead</button>
+    </div>
   </div>
 
   <div class="view" id="sosView" role="tabpanel" aria-labelledby="tab-sos">
-    <h1>Emergency SOS</h1>
+    <h1 tabindex="-1">Emergency SOS</h1>
     <div class="sos-card">
       <div class="contact-status" id="contactStatus" role="status" aria-live="polite">No emergency contact set yet.</div>
       <button class="big-btn" id="sendSosBtn">Send SOS Now</button>
@@ -726,7 +761,7 @@
   </div>
 
   <div class="view" id="placesView" role="tabpanel" aria-labelledby="tab-places">
-    <h1>Places</h1>
+    <h1 tabindex="-1">Places</h1>
     <div class="places-card">
       <div class="saved-places-list" id="savedPlacesList"></div>
       <button class="secondary-link-btn" id="newDestinationBtn" type="button">Where do you want to go? (voice)</button>
@@ -755,7 +790,7 @@
   </div>
 
   <div class="view" id="devicesView" role="tabpanel" aria-labelledby="tab-devices">
-    <h1>Devices</h1>
+    <h1 tabindex="-1">Devices</h1>
 
     <div class="device-card" id="deviceCard-glasses">
       <div class="device-icon-badge" aria-hidden="true"><i class="ti ti-eyeglass"></i></div>
@@ -793,7 +828,7 @@
   </div>
 
   <div class="view" id="settingsView" role="tabpanel" aria-labelledby="tab-settings">
-    <h1>Settings</h1>
+    <h1 tabindex="-1">Settings</h1>
 
     <div class="settings-card">
       <h2>Assistance mode</h2>
@@ -865,7 +900,7 @@
 
   <!-- ---------- Connect hub ---------- -->
   <div class="view" id="connectView" role="tabpanel" aria-labelledby="tab-connect">
-    <h1>Connect</h1>
+    <h1 tabindex="-1">Connect</h1>
     <button class="connect-card" id="openCircleBtn" type="button">
       <div class="connect-card-title">My Circle</div>
       <div class="connect-card-sub">People you trust — call or message them directly</div>
@@ -890,8 +925,8 @@
   <!-- ---------- My Circle ---------- -->
   <div class="view" id="circleView">
     <button class="text-link-btn" id="circleBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
-    <h1>My Circle</h1>
-    <div id="circleList" role="status" aria-live="polite"></div>
+    <h1 tabindex="-1">My Circle</h1>
+    <div id="circleList" role="list" aria-live="polite"></div>
     <button class="secondary-link-btn" id="addCircleBtn" type="button">+ Add someone to My Circle</button>
 
     <div class="add-person-form" id="addCircleForm" style="display:none;">
@@ -914,7 +949,7 @@
   <!-- ---------- Community (preview only) ---------- -->
   <div class="view" id="communityView">
     <button class="text-link-btn" id="communityBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
-    <h1>Community</h1>
+    <h1 tabindex="-1">Community</h1>
     <div class="devices-honesty-note" style="margin-bottom:14px;">
       Preview only. Community groups aren't connected to a real backend yet — no accounts,
       no live members, no messages are sent here. This shows what will exist once that's built.
@@ -925,7 +960,7 @@
   <!-- ---------- Peer Support (preview only) ---------- -->
   <div class="view" id="peerSupportView">
     <button class="text-link-btn" id="peerSupportBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
-    <h1>Peer Support</h1>
+    <h1 tabindex="-1">Peer Support</h1>
     <div class="devices-honesty-note" style="margin-bottom:14px;">
       Peer Support is for talking with people who may share your experience — it is not
       professional therapy. Preview only: matching and real conversations aren't connected
@@ -937,7 +972,7 @@
   <!-- ---------- Professional Support (preview only) ---------- -->
   <div class="view" id="professionalSupportView">
     <button class="text-link-btn" id="professionalSupportBackBtn" type="button" style="text-align:left;padding:0 0 12px;">&larr; Connect</button>
-    <h1>Professional Support</h1>
+    <h1 tabindex="-1">Professional Support</h1>
     <div class="devices-honesty-note" style="margin-bottom:14px;">
       Professional Support is for reaching qualified counselors or professionals — it is not
       a replacement for emergency services. Preview only: matching and booking aren't connected
@@ -986,6 +1021,9 @@
   const stateRing = document.getElementById('stateRing');
   const switchBtn = document.getElementById('switchBtn');
   const tapHint = document.getElementById('tapHint');
+  const describeSceneBtn = document.getElementById('describeSceneBtn');
+  const readTextBtn = document.getElementById('readTextBtn');
+  const hazardCheckBtn = document.getElementById('hazardCheckBtn');
   const navbar = document.getElementById('navbar');
   const homeView = document.getElementById('homeView');
   const sosView = document.getElementById('sosView');
@@ -1702,6 +1740,16 @@
 
   // ---------- Tabs ----------
     const CONNECT_SUBTABS = ['connect', 'circle', 'community', 'peerSupport', 'professionalSupport'];
+    // Used only to move accessibility focus to the new screen's heading on
+    // tab switch (see end of setTab below) — without this, a screen-reader
+    // user has no way of knowing the screen changed until they manually
+    // swipe around to rediscover where they are.
+    const VIEW_ELEMENTS = {
+      home: homeView, sos: sosView, places: placesView, devices: devicesView,
+      settings: settingsView, connect: connectView, circle: circleView,
+      community: communityView, peerSupport: peerSupportView,
+      professionalSupport: professionalSupportView
+    };
     function setTab(tab) {
     currentTab = tab;
     homeView.classList.toggle('active', tab === 'home');
@@ -1740,6 +1788,10 @@
     if (tab === 'settings') {
       renderSettingsScreen();
     }
+
+    const activeViewEl = VIEW_ELEMENTS[tab];
+    const heading = activeViewEl && activeViewEl.querySelector('h1');
+    if (heading) heading.focus({ preventScroll: true });
   }
 
   navbar.querySelectorAll('.nav-btn').forEach(btn => {
@@ -1773,6 +1825,7 @@
     sorted.forEach(person => {
       const row = document.createElement('div');
       row.className = 'person-row';
+      row.setAttribute('role', 'listitem');
       const photoHtml = person.photo
         ? `<img class="circle-photo" src="${person.photo}" alt="" />`
         : `<div class="circle-photo-placeholder">${(person.name || '?').charAt(0).toUpperCase()}</div>`;
@@ -3452,6 +3505,58 @@
       resetToIdle();
     }
   }
+
+  // ---------- Direct-action buttons (no voice input required) ----------
+  // Unlike double-tap (which starts by listening for a spoken question and
+  // only falls back to a default description on silence), these buttons
+  // go straight to the backend with a fixed question and never listen for
+  // speech first. That's the actual fix for noisy environments or anyone
+  // who prefers not to speak commands — not just a screen-reader label.
+  // Each press always captures a fresh frame, same as any other fresh-scene
+  // request elsewhere in the app.
+  async function runDirectAction(question) {
+    if (appState === 'listening' || appState === 'thinking') return;
+    if (contactSetupInProgress || awaitingContactConfirmation) return;
+
+    window.speechSynthesis.cancel();
+    setError('');
+    activeImageBase64 = null;
+    conversationHistory = [];
+
+    try {
+      const answer = await askBackend({ question });
+      setStatus('');
+      setError('');
+
+      await new Promise(resolve => speak(answer, resolve));
+
+      // Same optional follow-up window as the rest of the app: if the
+      // person stays quiet, this just times out and returns to idle —
+      // nobody is required to speak after using these buttons.
+      const followUp = await listenForFollowUp();
+      if (followUp) {
+        await runInteractionCycle(followUp);
+      } else {
+        resetToIdle();
+      }
+    } catch (err) {
+      setError((err && err.message ? err.message : 'Something went wrong') + ' — try the button again.');
+      resetToIdle();
+    }
+  }
+
+  describeSceneBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    runDirectAction('');
+  });
+  readTextBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    runDirectAction('Please read any visible text out loud.');
+  });
+  hazardCheckBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    runDirectAction('Is it safe to continue? Are there any hazards or obstacles nearby?');
+  });
 
   // ---------- Gesture handling: double-tap (anywhere) + long-press (anywhere) ----------
   let lastTapTime = 0;

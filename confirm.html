@@ -54,8 +54,8 @@
   <p id="intro">Someone using Ona needs help and listed you as their emergency contact.</p>
   <a class="map-link" id="mapLink" href="#" target="_blank" rel="noopener" style="display:none;">View their location on the map</a>
   <button class="confirm-btn" id="confirmBtn">I'm on my way</button>
-  <div class="status-text" id="statusText"></div>
-  <div class="error-text" id="errorText"></div>
+  <div class="status-text" id="statusText" role="status" aria-live="polite"></div>
+  <div class="error-text" id="errorText" role="alert"></div>
 </div>
 
 <script>
