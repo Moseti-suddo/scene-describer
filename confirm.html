@@ -105,7 +105,10 @@
     errorText.textContent = '';
 
     try {
-      const res = await fetch('/api/sos-confirm', {
+      // Same endpoint as loadStatus() above (GET checks status, POST
+      // confirms) — merged from the former separate /api/sos-confirm to
+      // stay within Vercel Hobby's 12-serverless-function limit.
+      const res = await fetch('/api/sos-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id })

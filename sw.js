@@ -27,7 +27,7 @@ self.addEventListener('notificationclick', (event) => {
 
   if (event.action === 'confirm' && sosId) {
     event.waitUntil(
-      fetch('/api/sos-confirm', {
+      fetch('/api/sos-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: sosId })

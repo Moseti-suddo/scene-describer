@@ -3589,7 +3589,7 @@
   // pipeline is tuned for physical-surroundings/navigation. This one is for
   // general uploaded or shared media (memes, screenshots, short videos) and
   // talks to a different endpoint with a different system prompt. See
-  // api/describe-media-create.js for why frame-sampling + the existing
+  // api/describe-media.js for why frame-sampling + the existing
   // Claude model was chosen over Nova Lite (Vercel's 4.5MB request-body
   // ceiling), with Nova Lite kept as a documented fallback if quality here
   // proves insufficient.
@@ -3768,7 +3768,7 @@
   async function pollMediaJob(jobId) {
     for (let attempt = 0; attempt < MEDIA_POLL_MAX_ATTEMPTS; attempt++) {
       await sleep(MEDIA_POLL_INTERVAL_MS);
-      const res = await fetch('/api/describe-media-status?id=' + encodeURIComponent(jobId));
+      const res = await fetch('/api/describe-media?id=' + encodeURIComponent(jobId));
       const data = await res.json();
       if (data.status === 'done') return data.description;
       if (data.status === 'error') throw new Error(data.error || 'Analysis failed');
@@ -3778,7 +3778,7 @@
   }
 
   async function askMediaBackend({ mediaType, frames, audioTranscript, question }) {
-    const createRes = await fetch('/api/describe-media-create', {
+    const createRes = await fetch('/api/describe-media', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mediaType, frames, audioTranscript: audioTranscript || null, question: question || '' })

@@ -6,7 +6,7 @@
     "api/orchestrate.js": {
       "maxDuration": 15
     },
-    "api/describe-media-create.js": {
+    "api/describe-media.js": {
       "maxDuration": 60
     }
   }
