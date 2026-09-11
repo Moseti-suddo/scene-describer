@@ -5,6 +5,9 @@
     },
     "api/orchestrate.js": {
       "maxDuration": 15
+    },
+    "api/describe-media-create.js": {
+      "maxDuration": 60
     }
   }
 }

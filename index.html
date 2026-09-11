@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Ona</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#000000">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
@@ -734,6 +736,8 @@
       <button class="direct-action-btn" id="describeSceneBtn" type="button">Describe my surroundings</button>
       <button class="direct-action-btn" id="readTextBtn" type="button">Read text or sign</button>
       <button class="direct-action-btn" id="hazardCheckBtn" type="button">Check for hazards ahead</button>
+      <button class="direct-action-btn" id="uploadMediaBtn" type="button">Describe a photo, meme, or video</button>
+      <input type="file" id="mediaFileInput" accept="image/*,video/*" class="sr-only" aria-hidden="true" tabindex="-1" />
     </div>
   </div>
 
@@ -1024,6 +1028,8 @@
   const describeSceneBtn = document.getElementById('describeSceneBtn');
   const readTextBtn = document.getElementById('readTextBtn');
   const hazardCheckBtn = document.getElementById('hazardCheckBtn');
+  const uploadMediaBtn = document.getElementById('uploadMediaBtn');
+  const mediaFileInput = document.getElementById('mediaFileInput');
   const navbar = document.getElementById('navbar');
   const homeView = document.getElementById('homeView');
   const sosView = document.getElementById('sosView');
@@ -1334,6 +1340,26 @@
     maneuverRoundabout: {
       en: 'Go through the roundabout',
       sw: 'Pita kwenye kipilefti'
+    },
+    mediaUploading: {
+      en: 'Uploading…',
+      sw: 'Ninapakia…'
+    },
+    mediaAnalyzing: {
+      en: 'Analyzing…',
+      sw: 'Ninachambua…'
+    },
+    mediaExtractingAudio: {
+      en: 'Checking for speech in the video…',
+      sw: 'Ninaangalia kama kuna maongezi kwenye video…'
+    },
+    mediaUnsupportedType: {
+      en: "That file isn't a photo or video I can describe.",
+      sw: 'Faili hiyo si picha au video ninayoweza kuelezea.'
+    },
+    mediaReceivedShared: {
+      en: 'Got the file you shared. Analyzing it now.',
+      sw: 'Nimepokea faili uliyoshiriki. Ninaichambua sasa.'
     }
   };
 
@@ -3558,6 +3584,340 @@
     runDirectAction('Is it safe to continue? Are there any hazards or obstacles nearby?');
   });
 
+  // ---------- General media description (uploaded/shared photos & videos) ----------
+  // Deliberately separate from askBackend()/api/describe.js above: that
+  // pipeline is tuned for physical-surroundings/navigation. This one is for
+  // general uploaded or shared media (memes, screenshots, short videos) and
+  // talks to a different endpoint with a different system prompt. See
+  // api/describe-media-create.js for why frame-sampling + the existing
+  // Claude model was chosen over Nova Lite (Vercel's 4.5MB request-body
+  // ceiling), with Nova Lite kept as a documented fallback if quality here
+  // proves insufficient.
+  const MEDIA_MAX_FRAMES = 8;
+  const MEDIA_FRAME_JPEG_QUALITY = 0.6;
+  const MEDIA_FRAME_MAX_DIMENSION = 768; // px, longest side
+  // How much of a longer video actually gets analyzed — keeps frame
+  // extraction + payload size bounded. A short note is added to the
+  // spoken result if a video is trimmed.
+  const MEDIA_MAX_VIDEO_SECONDS = 60;
+  const MEDIA_POLL_INTERVAL_MS = 1500;
+  const MEDIA_POLL_MAX_ATTEMPTS = 30; // ~45s of polling
+
+  let mediaJobActive = false;
+  // Kept in memory (not persisted) so a follow-up question can reuse the
+  // same frames/transcript without re-uploading — mirrors how
+  // activeImageBase64/conversationHistory work for the camera pipeline.
+  let lastMediaContext = null; // { mediaType, frames, audioTranscript }
+
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  // Resizes/compresses a source canvas-drawable (video frame or image) down
+  // to a JPEG base64 string small enough that even MEDIA_MAX_FRAMES of them
+  // stay comfortably under Vercel's 4.5MB request-body limit.
+  function drawToCompressedJpegBase64(drawable, sourceWidth, sourceHeight) {
+    const scale = Math.min(1, MEDIA_FRAME_MAX_DIMENSION / Math.max(sourceWidth, sourceHeight));
+    const w = Math.max(1, Math.round(sourceWidth * scale));
+    const h = Math.max(1, Math.round(sourceHeight * scale));
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    c.getContext('2d').drawImage(drawable, 0, 0, w, h);
+    return c.toDataURL('image/jpeg', MEDIA_FRAME_JPEG_QUALITY).split(',')[1];
+  }
+
+  function compressImageFile(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        try {
+          const frame = drawToCompressedJpegBase64(img, img.naturalWidth, img.naturalHeight);
+          resolve(frame);
+        } catch (err) {
+          reject(err);
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+      img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('Could not read that image')); };
+      img.src = objectUrl;
+    });
+  }
+
+  // Samples MEDIA_MAX_FRAMES evenly-spaced frames from a video file by
+  // seeking an offscreen <video> element — the same capture technique the
+  // camera pipeline already uses, just applied at fixed timestamps instead
+  // of live. Returns { frames, durationSeconds, wasTrimmed }.
+  function sampleVideoFrames(file) {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const offVideo = document.createElement('video');
+      offVideo.muted = true;
+      offVideo.playsInline = true;
+      offVideo.preload = 'auto';
+      offVideo.src = objectUrl;
+
+      offVideo.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Could not read that video'));
+      };
+
+      offVideo.onloadedmetadata = async () => {
+        try {
+          const fullDuration = offVideo.duration || 0;
+          const analyzedDuration = Math.min(fullDuration, MEDIA_MAX_VIDEO_SECONDS);
+          const wasTrimmed = fullDuration > MEDIA_MAX_VIDEO_SECONDS;
+          const frameCount = Math.max(1, Math.min(MEDIA_MAX_FRAMES, Math.ceil(analyzedDuration)));
+
+          const frames = [];
+          for (let i = 0; i < frameCount; i++) {
+            // Evenly spaced, nudged slightly inward from 0/duration so we
+            // don't land on a black first/last frame.
+            const t = frameCount === 1
+              ? analyzedDuration / 2
+              : (analyzedDuration * i) / (frameCount - 1);
+            const seekTo = Math.min(Math.max(t, 0.05), Math.max(analyzedDuration - 0.05, 0.05));
+
+            await new Promise((seekResolve) => {
+              const onSeeked = () => { offVideo.removeEventListener('seeked', onSeeked); seekResolve(); };
+              offVideo.addEventListener('seeked', onSeeked);
+              offVideo.currentTime = seekTo;
+            });
+
+            frames.push(drawToCompressedJpegBase64(offVideo, offVideo.videoWidth, offVideo.videoHeight));
+          }
+
+          URL.revokeObjectURL(objectUrl);
+          resolve({ frames, durationSeconds: fullDuration, wasTrimmed });
+        } catch (err) {
+          URL.revokeObjectURL(objectUrl);
+          reject(err);
+        }
+      };
+    });
+  }
+
+  // Best-effort audio extraction + transcription from a video file, reusing
+  // the existing Groq Whisper /api/transcribe pipeline. Plays the video's
+  // audio track in real time while recording it — the only way to pull
+  // audio out of a decoded <video> element without a server-side transcode
+  // step, which we deliberately avoided adding for this prototype. Fully
+  // feature-detected: if captureStream/MediaRecorder audio capture isn't
+  // available, this silently returns null and the description simply
+  // proceeds without a spoken-audio transcript, rather than blocking or
+  // erroring the whole upload.
+  async function tryExtractAndTranscribeAudio(file, durationSeconds) {
+    if (!voiceSupported) return null;
+
+    const offVideo = document.createElement('video');
+    const objectUrl = URL.createObjectURL(file);
+    offVideo.src = objectUrl;
+    offVideo.muted = false;
+    offVideo.playsInline = true;
+
+    // Cap how long we're willing to sit here recording playback — matches
+    // the same analysis window used for frame sampling.
+    const captureSeconds = Math.min(durationSeconds || MEDIA_MAX_VIDEO_SECONDS, MEDIA_MAX_VIDEO_SECONDS);
+
+    try {
+      await new Promise((res, rej) => {
+        offVideo.onloadedmetadata = res;
+        offVideo.onerror = () => rej(new Error('video load failed'));
+      });
+
+      const captureFn = offVideo.captureStream || offVideo.mozCaptureStream;
+      if (!captureFn) { URL.revokeObjectURL(objectUrl); return null; }
+
+      const fullStream = captureFn.call(offVideo);
+      const audioTracks = fullStream.getAudioTracks();
+      if (!audioTracks.length) { URL.revokeObjectURL(objectUrl); return null; }
+
+      const audioOnlyStream = new MediaStream(audioTracks);
+      const mimeType = pickRecorderMimeType();
+      const recorder = mimeType ? new MediaRecorder(audioOnlyStream, { mimeType }) : new MediaRecorder(audioOnlyStream);
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+
+      const recordingDone = new Promise((res) => { recorder.onstop = res; });
+
+      recorder.start();
+      offVideo.currentTime = 0;
+      await offVideo.play();
+
+      await Promise.race([
+        new Promise((res) => { offVideo.onended = res; }),
+        sleep(captureSeconds * 1000)
+      ]);
+
+      offVideo.pause();
+      recorder.stop();
+      await recordingDone;
+      URL.revokeObjectURL(objectUrl);
+
+      const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+      if (blob.size < 2000) return null; // effectively silent — not worth a transcription call
+
+      const text = await transcribeAudio(blob, mimeType);
+      return text && text.trim() ? text.trim() : null;
+    } catch (err) {
+      URL.revokeObjectURL(objectUrl);
+      return null; // Best-effort only — never block the visual description over this.
+    }
+  }
+
+  async function pollMediaJob(jobId) {
+    for (let attempt = 0; attempt < MEDIA_POLL_MAX_ATTEMPTS; attempt++) {
+      await sleep(MEDIA_POLL_INTERVAL_MS);
+      const res = await fetch('/api/describe-media-status?id=' + encodeURIComponent(jobId));
+      const data = await res.json();
+      if (data.status === 'done') return data.description;
+      if (data.status === 'error') throw new Error(data.error || 'Analysis failed');
+      // status === 'pending' (or not_found on a very early poll) — keep waiting
+    }
+    throw new Error('Analysis is taking longer than expected. Please try again.');
+  }
+
+  async function askMediaBackend({ mediaType, frames, audioTranscript, question }) {
+    const createRes = await fetch('/api/describe-media-create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mediaType, frames, audioTranscript: audioTranscript || null, question: question || '' })
+    });
+    const createData = await createRes.json();
+    if (!createRes.ok) throw new Error(createData.error || 'Could not start analysis');
+    if (createData.jobId) return pollMediaJob(createData.jobId);
+    if (createData.description) return createData.description; // defensive fallback
+    throw new Error('No analysis job was returned');
+  }
+
+  // Shared entry point for both the manual file-picker upload and a file
+  // arriving via the Web Share Target flow below — same handling either way.
+  async function handleMediaFile(file) {
+    if (mediaJobActive) return;
+    if (!file || typeof file.type !== 'string') {
+      await speakAsync(t('mediaUnsupportedType'));
+      return;
+    }
+
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    if (!isImage && !isVideo) {
+      await speakAsync(t('mediaUnsupportedType'));
+      return;
+    }
+
+    mediaJobActive = true;
+    setError('');
+    setState('thinking');
+
+    try {
+      let frames, audioTranscript = null, wasTrimmed = false;
+
+      if (isImage) {
+        setStatus(t('mediaUploading'));
+        frames = [await compressImageFile(file)];
+      } else {
+        setStatus(t('mediaUploading'));
+        const sampled = await sampleVideoFrames(file);
+        frames = sampled.frames;
+        wasTrimmed = sampled.wasTrimmed;
+
+        setStatus(t('mediaExtractingAudio'));
+        audioTranscript = await tryExtractAndTranscribeAudio(file, sampled.durationSeconds);
+      }
+
+      lastMediaContext = { mediaType: isImage ? 'image' : 'video', frames, audioTranscript };
+
+      setStatus(t('mediaAnalyzing'));
+      let description = await askMediaBackend({
+        mediaType: lastMediaContext.mediaType,
+        frames,
+        audioTranscript,
+        question: ''
+      });
+
+      if (wasTrimmed) {
+        description += (preferredLanguage === 'sw'
+          ? ' Kumbuka: video hii ni ndefu, kwa hivyo ni sehemu ya mwanzo pekee iliyochambuliwa.'
+          : ' Note: this video is longer than I can fully analyze, so only the first part was reviewed.');
+      }
+
+      setStatus('');
+      await new Promise(resolve => speak(description, resolve));
+      resetToIdle();
+    } catch (err) {
+      setError((err && err.message ? err.message : 'Something went wrong analyzing that file') + '.');
+      resetToIdle();
+    } finally {
+      mediaJobActive = false;
+    }
+  }
+
+  uploadMediaBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (mediaJobActive) return;
+    mediaFileInput.click();
+  });
+
+  mediaFileInput.addEventListener('change', (e) => {
+    e.stopPropagation();
+    const file = mediaFileInput.files && mediaFileInput.files[0];
+    mediaFileInput.value = ''; // allow re-selecting the same file next time
+    if (file) handleMediaFile(file);
+  });
+
+  // ---------- Web Share Target hand-off ----------
+  // When Ona is installed as a PWA and someone shares a file to it from
+  // another app (e.g. a meme from WhatsApp), the OS POSTs it to
+  // /share-target, which sw.js intercepts and stashes in Cache Storage
+  // before redirecting back here with ?shared=1. This is the actual point
+  // of installing as a PWA for this feature: no browsing to find the file
+  // in a picker, just the share sheet they already use. Falls back
+  // silently to "nothing shared" if the cache entry is missing for any
+  // reason (e.g. opened directly rather than via a real share).
+  const SHARE_CACHE_NAME = 'ona-shared-media';
+  const SHARE_CACHE_KEY = '/__shared-media-pending';
+
+  async function consumeSharedMediaIfPresent() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('shared') !== '1') return;
+
+    // Clean the URL immediately so a page refresh doesn't try to reprocess.
+    history.replaceState(null, '', window.location.pathname);
+
+    if (!('caches' in window)) return;
+    try {
+      const cache = await caches.open(SHARE_CACHE_NAME);
+      const cachedResponse = await cache.match(SHARE_CACHE_KEY);
+      if (!cachedResponse) return;
+
+      const blob = await cachedResponse.blob();
+      await cache.delete(SHARE_CACHE_KEY);
+
+      const contentType = cachedResponse.headers.get('Content-Type') || blob.type || 'application/octet-stream';
+      // Wrap as a File so handleMediaFile's checks (file.type) behave the
+      // same as a picker-selected file.
+      const file = new File([blob], 'shared-media', { type: contentType });
+
+      await speakAsync(t('mediaReceivedShared'));
+      await handleMediaFile(file);
+    } catch (err) {
+      // Nothing usable was cached — just proceed as a normal app open.
+    }
+  }
+
+  // ---------- Service worker registration ----------
+  // Needed for both push (SOS confirmations) and the Web Share Target
+  // hand-off above — a share only routes to this app once a service worker
+  // from this origin is registered and the app has been installed
+  // (Add to Home Screen) using manifest.json's share_target entry.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Non-fatal: push and share-target simply won't work this session;
+      // everything else in the app functions without it.
+    });
+  }
+
   // ---------- Gesture handling: double-tap (anywhere) + long-press (anywhere) ----------
   let lastTapTime = 0;
   const DOUBLE_TAP_WINDOW_MS = 400;
@@ -3647,6 +4007,7 @@
   renderDevicesScreen();
   renderSettingsScreen();
   startCamera();
+  consumeSharedMediaIfPresent();
 </script>
 </body>
 </html>
