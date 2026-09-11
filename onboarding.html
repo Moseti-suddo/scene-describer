@@ -687,12 +687,14 @@
     const stale = () => token !== activeStepToken;
 
     if (id === 'welcome') {
-      await speakAsync("Welcome to Ona. Your world, made more accessible through voice, AI, and human connection. Let's set things up. You can say what you want any time, or just tap the buttons. Say get started, or tap Get Started, to begin.");
-      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
-      if (stale()) return;
-      if (matchesAny(heard, ['get started', 'start', 'continue', 'begin'])) {
-        goToStep('profile');
-      }
+      // Deliberately no listenOnce() call here. This step runs the moment
+      // the page loads, before the person has done anything at all — if we
+      // requested the microphone here, the browser's permission dialog
+      // would appear as a surprise the instant the page opens, potentially
+      // blocking the (fully functional, gesture-free) Get Started button
+      // underneath it. Voice input starts from the next step onward,
+      // right after the person's own tap has taken them there.
+      await speakAsync("Welcome to Ona. Your world, made more accessible through voice, AI, and human connection. Let's set things up. You can say what you want any time, or just tap the buttons. Tap Get Started to begin. After that, I'll ask permission to use your microphone, so you can speak your answers instead of tapping buttons — that's optional, everything here also works by touch alone.");
       return;
     }
 
