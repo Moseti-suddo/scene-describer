@@ -292,6 +292,14 @@
   </div>
 
   <!-- Step 1: Profile type -->
+  <!-- Hidden for the demo build: only the visually-impaired experience is
+       built, so this screen is skipped entirely (welcomeNextBtn jumps
+       straight to step-language after silently calling
+       selectProfileVisual()). Left fully intact — markup, handlers, and
+       the runStepVoice('profile') voice branch — so re-enabling it later
+       (once the hearing-impaired persona exists) is just pointing
+       welcomeNextBtn back at goToStep('profile') and restoring the
+       "STEP X OF 6" labels below. -->
   <div class="step" id="step-profile">
     <div class="progress-text">STEP 1 OF 6</div>
     <h1 tabindex="-1">Who is this for?</h1>
@@ -312,7 +320,7 @@
 
   <!-- Step 2: Language -->
   <div class="step" id="step-language">
-    <div class="progress-text">STEP 2 OF 6</div>
+    <div class="progress-text">STEP 1 OF 5</div>
     <h1 tabindex="-1">Choose your language</h1>
     <p class="subtitle">You can mix languages any time while talking to the app — this just sets the app's own voice. Say "English" or "Kiswahili".</p>
 
@@ -329,7 +337,7 @@
 
   <!-- Step 3: Register familiar faces (list view) -->
   <div class="step" id="step-faces">
-    <div class="progress-text">STEP 3 OF 6</div>
+    <div class="progress-text">STEP 2 OF 5</div>
     <h1 tabindex="-1">Register Familiar Faces</h1>
     <p class="subtitle">Add people close to you now, for faster recognition later. Fully optional. Say "add a person" or "skip".</p>
 
@@ -373,7 +381,7 @@
 
   <!-- Step 4: Bluetooth pairing -->
   <div class="step" id="step-bluetooth">
-    <div class="progress-text">STEP 4 OF 6</div>
+    <div class="progress-text">STEP 3 OF 5</div>
     <h1 tabindex="-1">Connect a Bluetooth Device</h1>
     <p class="subtitle">Pair an earpiece so responses speak privately in your ear. Say "pair" or "skip".</p>
 
@@ -391,7 +399,7 @@
 
   <!-- Step 5: Personalization -->
   <div class="step" id="step-personalize">
-    <div class="progress-text">STEP 5 OF 6</div>
+    <div class="progress-text">STEP 4 OF 5</div>
     <h1 tabindex="-1">Personalize Your Experience</h1>
 
     <div class="field-card">
@@ -429,7 +437,7 @@
 
   <!-- Step 6: Voice tutorial -->
   <div class="step" id="step-tutorial">
-    <div class="progress-text">STEP 6 OF 6</div>
+    <div class="progress-text">STEP 5 OF 5</div>
     <h1 tabindex="-1">Voice Commands</h1>
     <p class="subtitle">Double-tap anywhere to talk. Here's what you can say:</p>
 
@@ -874,7 +882,15 @@
   }
 
   // ---------- Step 0: Welcome ----------
-  document.getElementById('welcomeNextBtn').addEventListener('click', () => goToStep('profile'));
+  // For the demo build, only the visually-impaired experience is built, so
+  // this skips straight past step-profile (see the commented-out block
+  // above step-profile for how to restore it) and silently records
+  // profileType: 'visual', matching what selectProfileVisual() would have
+  // set had the person tapped that card themselves.
+  document.getElementById('welcomeNextBtn').addEventListener('click', () => {
+    selectProfileVisual();
+    goToStep('language');
+  });
 
   // ---------- Step 1: Profile type ----------
   const profileVisualBtn = document.getElementById('profileVisualBtn');
