@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Connect — Ona</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #000;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+  }
+  .card {
+    max-width: 420px;
+    width: 100%;
+    text-align: center;
+  }
+  .wordmark {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #FFD400;
+    margin-bottom: 18px;
+  }
+  h1 {
+    font-size: 26px;
+    font-weight: 800;
+    margin: 0 0 10px;
+    color: #fff;
+  }
+  p.subtitle {
+    font-size: 16px;
+    line-height: 1.5;
+    color: #ccc;
+    margin: 0 0 32px;
+  }
+  .link-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: left;
+  }
+  .link-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 18px 20px;
+    border-radius: 14px;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .link-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+
+  .link-btn.primary {
+    background: #FFD400;
+    color: #000;
+  }
+  .link-btn.secondary {
+    background: #111;
+    color: #fff;
+    border: 2px solid #333;
+  }
+  .link-btn .link-label { display: flex; flex-direction: column; gap: 3px; }
+  .link-btn .link-title { font-size: 16px; font-weight: 800; }
+  .link-btn .link-sub {
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0.75;
+  }
+  .link-btn .arrow {
+    font-size: 20px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  footer {
+    margin-top: 36px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #666;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="wordmark" aria-hidden="true">ONA</div>
+    <h1>Let's connect</h1>
+    <p class="subtitle">
+      Try the app, follow the project, or reach out directly — pick where you'd like to go.
+    </p>
+
+    <div class="link-list" role="list">
+      <a class="link-btn primary" role="listitem"
+         href="https://scene-describer.vercel.app"
+         aria-label="Try Ona, opens the live app">
+        <span class="link-label">
+          <span class="link-title">Try Ona</span>
+          <span class="link-sub">The live app</span>
+        </span>
+        <span class="arrow" aria-hidden="true">&rarr;</span>
+      </a>
+
+      <a class="link-btn secondary" role="listitem"
+         href="PASTE-YOUR-LINKEDIN-URL-HERE"
+         aria-label="Connect on LinkedIn">
+        <span class="link-label">
+          <span class="link-title">Connect on LinkedIn</span>
+          <span class="link-sub">Let's stay in touch</span>
+        </span>
+        <span class="arrow" aria-hidden="true">&rarr;</span>
+      </a>
+
+      <a class="link-btn secondary" role="listitem"
+         href="https://github.com/Moseti-suddo/scene-describer"
+         aria-label="View the source code on GitHub">
+        <span class="link-label">
+          <span class="link-title">View the code</span>
+          <span class="link-sub">GitHub repository</span>
+        </span>
+        <span class="arrow" aria-hidden="true">&rarr;</span>
+      </a>
+    </div>
+
+    <footer>
+      Ona — voice-first accessibility, built for a Swahili-speaking, Kenyan context.
+    </footer>
+  </div>
+</body>
+</html>

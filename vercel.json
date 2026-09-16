@@ -9,5 +9,8 @@
     "api/describe-media.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "rewrites": [
+    { "source": "/connect", "destination": "/connect.html" }
+  ]
 }
