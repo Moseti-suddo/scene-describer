@@ -389,6 +389,76 @@
     margin-top: 18px;
     line-height: 1.5;
   }
+  .mapped-places-card {
+    background: #111;
+    border: 2px solid #333;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+  .mapped-places-card h2 {
+    margin: 0 0 6px;
+    font-size: 20px;
+  }
+  .mapped-places-card .helper {
+    color: #999;
+    font-size: 14px;
+    line-height: 1.45;
+    margin: 0 0 14px;
+  }
+  .mapped-place-row {
+    background: #000;
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .mapped-place-row strong { display: block; color: #fff; font-size: 16px; }
+  .mapped-place-row span { display: block; color: #999; font-size: 13px; margin-top: 3px; }
+  .mapped-place-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .mapped-place-actions button { margin-top: 0; flex: 1; }
+  .mapping-form {
+    display: none;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 2px solid #333;
+  }
+  .mapping-form.visible { display: block; }
+  .mapping-form label {
+    display: block;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    margin: 10px 0 6px;
+  }
+  .mapping-form input, .mapping-form textarea, .mapping-form select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 11px 12px;
+    background: #000;
+    color: #fff;
+    border: 2px solid #333;
+    border-radius: 8px;
+    font: inherit;
+  }
+  .mapping-form textarea { min-height: 76px; resize: vertical; }
+  .mapping-form input:focus-visible, .mapping-form textarea:focus-visible,
+  .mapping-form select:focus-visible { outline: 3px solid #fff; outline-offset: 1px; }
+  .mapping-status {
+    color: #FFD400;
+    font-size: 14px;
+    min-height: 20px;
+    margin: 10px 0;
+  }
+  .mapping-check-result {
+    color: #fff;
+    background: #1a1600;
+    border: 2px solid #6b5b00;
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 10px;
+    line-height: 1.4;
+  }
   .route-map-card {
     margin-top: 16px;
     border: 2px solid #333;
@@ -791,6 +861,41 @@
       <br /><br />
       Prototype note: this plays back a real walking route step by step. It does not yet track your live position, so steps advance manually rather than automatically as you walk.
     </div>
+
+    <div class="mapped-places-card">
+      <h2>Mapped Places</h2>
+      <p class="helper">
+        Create a private map of a home, workplace, or other familiar environment.
+        Reference photos stay on this device; Azure is used only to create visual
+        fingerprints for matching.
+      </p>
+      <div id="mappedPlacesList"></div>
+      <button class="secondary-link-btn" id="newMappedPlaceBtn" type="button">Map a new place</button>
+
+      <div class="mapping-form" id="mappingForm">
+        <label for="mappedPlaceNameInput">Place name</label>
+        <input id="mappedPlaceNameInput" type="text" placeholder="e.g. My workplace" />
+        <button class="primary-btn" id="startMappingBtn" type="button">Start mapping</button>
+
+        <div id="landmarkCaptureForm" style="display:none;">
+          <label for="landmarkNameInput">Landmark or destination</label>
+          <input id="landmarkNameInput" type="text" placeholder="e.g. Reception desk or My desk" />
+          <label for="landmarkTypeInput">Type</label>
+          <select id="landmarkTypeInput">
+            <option value="landmark">Landmark</option>
+            <option value="destination">Destination</option>
+            <option value="hazard">Hazard</option>
+            <option value="entrance">Entrance</option>
+            <option value="room">Room or area</option>
+          </select>
+          <label for="landmarkNotesInput">Notes</label>
+          <textarea id="landmarkNotesInput" placeholder="What should Ona say or remember here?"></textarea>
+          <div class="mapping-status" id="mappingStatus" role="status" aria-live="polite"></div>
+          <button class="primary-btn" id="captureLandmarkBtn" type="button">Capture this landmark</button>
+          <button class="text-link-btn" id="finishMappingBtn" type="button">Finish mapping</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="view" id="devicesView" role="tabpanel" aria-labelledby="tab-devices">
@@ -1048,6 +1153,18 @@
   const navStepTextEl = document.getElementById('navStepText');
   const nextStepBtn = document.getElementById('nextStepBtn');
   const routeMapCard = document.getElementById('routeMapCard');
+  const mappedPlacesListEl = document.getElementById('mappedPlacesList');
+  const newMappedPlaceBtn = document.getElementById('newMappedPlaceBtn');
+  const mappingForm = document.getElementById('mappingForm');
+  const mappedPlaceNameInput = document.getElementById('mappedPlaceNameInput');
+  const startMappingBtn = document.getElementById('startMappingBtn');
+  const landmarkCaptureForm = document.getElementById('landmarkCaptureForm');
+  const landmarkNameInput = document.getElementById('landmarkNameInput');
+  const landmarkTypeInput = document.getElementById('landmarkTypeInput');
+  const landmarkNotesInput = document.getElementById('landmarkNotesInput');
+  const mappingStatusEl = document.getElementById('mappingStatus');
+  const captureLandmarkBtn = document.getElementById('captureLandmarkBtn');
+  const finishMappingBtn = document.getElementById('finishMappingBtn');
   const devicesView = document.getElementById('devicesView');
   const settingsView = document.getElementById('settingsView');
   const settingsModeStatusEl = document.getElementById('settingsModeStatus');
@@ -1492,6 +1609,209 @@
   let activeRoute = null;
   let navigationInProgress = false;
 
+  // ---------- Mapped Places state ----------
+  const MAPPED_PLACES_DB = 'ona-mapped-places';
+  const MAPPED_PLACES_STORE = 'places';
+  let mappedPlaces = [];
+  let activeMappingPlace = null;
+  let mappedPlacesDbPromise = null;
+
+  function openMappedPlacesDb() {
+    if (mappedPlacesDbPromise) return mappedPlacesDbPromise;
+    mappedPlacesDbPromise = new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error('This browser does not support local mapped-place storage'));
+        return;
+      }
+      const request = indexedDB.open(MAPPED_PLACES_DB, 1);
+      request.onupgradeneeded = () => {
+        request.result.createObjectStore(MAPPED_PLACES_STORE, { keyPath: 'id' });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error('Could not open mapped-place storage'));
+    });
+    return mappedPlacesDbPromise;
+  }
+
+  async function loadMappedPlaces() {
+    const db = await openMappedPlacesDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(MAPPED_PLACES_STORE, 'readonly');
+      const request = tx.objectStore(MAPPED_PLACES_STORE).getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error || new Error('Could not load mapped places'));
+    });
+  }
+
+  async function saveMappedPlace(place) {
+    const db = await openMappedPlacesDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(MAPPED_PLACES_STORE, 'readwrite');
+      tx.objectStore(MAPPED_PLACES_STORE).put(place);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error || new Error('Could not save mapped place'));
+    });
+  }
+
+  function cosineSimilarity(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length || !a.length) return -1;
+    let dot = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < a.length; i += 1) {
+      dot += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    if (!normA || !normB) return -1;
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  async function vectorizeImage(image) {
+    const response = await fetch('/api/vision-vectorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Vision service returned ${response.status}`);
+    return data.vector;
+  }
+
+  function captureMappingFrameBase64() {
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    if (!sourceWidth || !sourceHeight) throw new Error('Camera is not ready yet');
+    const scale = Math.min(1, 960 / sourceWidth);
+    canvas.width = Math.round(sourceWidth * scale);
+    canvas.height = Math.round(sourceHeight * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.72).split(',')[1];
+  }
+
+  function renderMappedPlaces() {
+    if (!mappedPlaces.length) {
+      mappedPlacesListEl.innerHTML = '<div class="no-places-text">No mapped places yet.</div>';
+      return;
+    }
+    mappedPlacesListEl.innerHTML = '';
+    mappedPlaces.forEach(place => {
+      const row = document.createElement('div');
+      row.className = 'mapped-place-row';
+      row.innerHTML = `<strong></strong><span></span><div class="mapped-place-actions"><button class="secondary-link-btn match-mapped-place" type="button">Check where I am</button></div><div class="mapping-check-result" hidden></div>`;
+      row.querySelector('strong').textContent = place.name;
+      row.querySelector('span').textContent = `${place.landmarks.length} landmark${place.landmarks.length === 1 ? '' : 's'} saved locally`;
+      row.querySelector('.match-mapped-place').addEventListener('click', async (event) => {
+        event.stopPropagation();
+        const resultEl = row.querySelector('.mapping-check-result');
+        resultEl.hidden = false;
+        resultEl.textContent = 'Checking the current camera view…';
+        try {
+          const vector = await vectorizeImage(captureMappingFrameBase64());
+          const matches = place.landmarks
+            .map(landmark => ({ landmark, score: cosineSimilarity(vector, landmark.vector) }))
+            .sort((a, b) => b.score - a.score);
+          const best = matches[0];
+          if (!best || best.score < 0.65) {
+            resultEl.textContent = 'I could not confidently match this view to a saved landmark.';
+            return;
+          }
+          resultEl.textContent = `This looks like ${best.landmark.name}. Confidence: ${Math.round(best.score * 100)}%. ${best.landmark.notes || ''}`.trim();
+        } catch (err) {
+          resultEl.textContent = 'Could not check the current view: ' + (err && err.message ? err.message : err);
+        }
+      });
+      mappedPlacesListEl.appendChild(row);
+    });
+  }
+
+  async function refreshMappedPlaces() {
+    try {
+      mappedPlaces = await loadMappedPlaces();
+      renderMappedPlaces();
+    } catch (err) {
+      mappedPlacesListEl.innerHTML = '<div class="no-places-text">Local mapped-place storage is unavailable in this browser.</div>';
+      console.error('mapped places load error:', err);
+    }
+  }
+
+  newMappedPlaceBtn.addEventListener('click', () => {
+    mappingForm.classList.toggle('visible');
+    if (mappingForm.classList.contains('visible')) mappedPlaceNameInput.focus();
+  });
+
+  startMappingBtn.addEventListener('click', async () => {
+    const name = mappedPlaceNameInput.value.trim();
+    if (!name) {
+      mappingStatusEl.textContent = 'Enter a name for this place first.';
+      return;
+    }
+    activeMappingPlace = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `mapped-${Date.now()}`,
+      name,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      landmarks: []
+    };
+    landmarkCaptureForm.style.display = 'block';
+    startMappingBtn.style.display = 'none';
+    mappingStatusEl.textContent = 'Move the camera toward a landmark, then capture it.';
+    landmarkNameInput.focus();
+  });
+
+  captureLandmarkBtn.addEventListener('click', async () => {
+    if (!activeMappingPlace) return;
+    const name = landmarkNameInput.value.trim();
+    if (!name) {
+      mappingStatusEl.textContent = 'Name this landmark before capturing it.';
+      return;
+    }
+    captureLandmarkBtn.disabled = true;
+    mappingStatusEl.textContent = 'Creating a visual fingerprint…';
+    try {
+      const image = captureMappingFrameBase64();
+      const vector = await vectorizeImage(image);
+      activeMappingPlace.landmarks.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : `landmark-${Date.now()}`,
+        name,
+        type: landmarkTypeInput.value,
+        notes: landmarkNotesInput.value.trim(),
+        image,
+        vector,
+        capturedAt: Date.now()
+      });
+      activeMappingPlace.updatedAt = Date.now();
+      mappingStatusEl.textContent = `${name} saved. Point at another landmark or finish mapping.`;
+      landmarkNameInput.value = '';
+      landmarkNotesInput.value = '';
+      landmarkNameInput.focus();
+    } catch (err) {
+      mappingStatusEl.textContent = 'Could not save this landmark: ' + (err && err.message ? err.message : err);
+    } finally {
+      captureLandmarkBtn.disabled = false;
+    }
+  });
+
+  finishMappingBtn.addEventListener('click', async () => {
+    if (!activeMappingPlace) return;
+    if (!activeMappingPlace.landmarks.length) {
+      mappingStatusEl.textContent = 'Capture at least one landmark before finishing.';
+      return;
+    }
+    try {
+      await saveMappedPlace(activeMappingPlace);
+      mappedPlaces.push(activeMappingPlace);
+      renderMappedPlaces();
+      mappingStatusEl.textContent = `${activeMappingPlace.name} is saved on this device.`;
+      activeMappingPlace = null;
+      landmarkCaptureForm.style.display = 'none';
+      startMappingBtn.style.display = '';
+      mappedPlaceNameInput.value = '';
+    } catch (err) {
+      mappingStatusEl.textContent = 'Could not save this place locally: ' + (err && err.message ? err.message : err);
+    }
+  });
+
   // ---------- Offline route caching (demo resilience) ----------
   const CACHED_ROUTES_KEY = 'cachedRoutes';
 
@@ -1806,6 +2126,7 @@
     }
     if (tab === 'places') {
       renderPlacesScreen();
+      refreshMappedPlaces();
       if (routeMap) requestAnimationFrame(() => routeMap.resize());
     }
     if (tab === 'devices') {
