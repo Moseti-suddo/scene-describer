@@ -55,7 +55,8 @@
   .video-frame {
     position: relative;
     width: 100%;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
+    height: clamp(360px, 58vh, 720px);
     min-height: 0;
     background: #111;
     border: 3px solid #FFD400;
@@ -529,6 +530,62 @@
   }
   .mapping-check-result.match-found { border-color: #4ADE80; background: #12351f; }
   .mapping-check-result.low-confidence { border-color: #FFD400; background: #3a3000; }
+  .mapping-camera-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    padding: 14px;
+    background: #000;
+    overflow-y: auto;
+  }
+  .mapping-camera-overlay.visible { display: block; }
+  .mapping-camera-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .mapping-camera-header h2 {
+    margin: 0;
+    color: #FFD400;
+    font-size: 20px;
+  }
+  .mapping-camera-preview {
+    position: relative;
+    height: min(52vh, 520px);
+    min-height: 300px;
+    border: 3px solid #FFD400;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #111;
+  }
+  #mappingVideo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .mapping-camera-hint {
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.4;
+    margin: 10px 0;
+  }
+  .mapping-camera-overlay .mapping-form {
+    display: block;
+    margin: 0;
+    padding: 14px 0 0;
+    border-top: 0;
+  }
+  .mapping-close-btn {
+    min-height: 44px;
+    padding: 8px 14px;
+    background: transparent;
+    color: #fff;
+    border: 2px solid #fff;
+  }
   .route-map-card {
     margin-top: 16px;
     border: 2px solid #333;
@@ -1281,8 +1338,24 @@
   </button>
 </nav>
 
+<section class="mapping-camera-overlay" id="mappingCameraOverlay" aria-label="Map a new place">
+  <div class="mapping-camera-header">
+    <h2>Map a new place</h2>
+    <button class="mapping-close-btn" id="closeMappingCameraBtn" type="button">Close</button>
+  </div>
+  <div class="mapping-camera-preview">
+    <video id="mappingVideo" autoplay playsinline muted aria-label="Live mapping camera preview"></video>
+  </div>
+  <p class="mapping-camera-hint">Point the camera at a landmark, name it below, then capture a reference view. You can add another landmark before finishing.</p>
+  <div id="mappingCameraControls"></div>
+</section>
+
 <script>
   const video = document.getElementById('video');
+  const mappingVideo = document.getElementById('mappingVideo');
+  const mappingCameraOverlay = document.getElementById('mappingCameraOverlay');
+  const mappingCameraControls = document.getElementById('mappingCameraControls');
+  const closeMappingCameraBtn = document.getElementById('closeMappingCameraBtn');
   const canvas = document.getElementById('canvas');
   const statusEl = document.getElementById('status');
   const errorEl = document.getElementById('error');
@@ -1855,6 +1928,38 @@
   let mappedPlaces = [];
   let activeMappingPlace = null;
   let mappedPlacesDbPromise = null;
+  let mappingCameraStream = null;
+
+  if (mappingCameraControls && mappingForm) mappingCameraControls.appendChild(mappingForm);
+
+  async function startMappingCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      mappingStatusEl.textContent = 'Camera unavailable on this device.';
+      return;
+    }
+    if (mappingCameraStream) mappingCameraStream.getTracks().forEach(track => track.stop());
+    try {
+      mappingCameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
+      mappingVideo.srcObject = mappingCameraStream;
+      await mappingVideo.play();
+      mappingStatusEl.textContent = 'Camera ready. Point at a landmark and capture it.';
+    } catch (err) {
+      mappingStatusEl.textContent = 'Camera unavailable. Check camera permissions and try again.';
+    }
+  }
+
+  function closeMappingCamera() {
+    if (mappingCameraStream) {
+      mappingCameraStream.getTracks().forEach(track => track.stop());
+      mappingCameraStream = null;
+    }
+    mappingVideo.srcObject = null;
+    mappingCameraOverlay.classList.remove('visible');
+    newMappedPlaceBtn.focus();
+  }
 
   function openMappedPlacesDb() {
     if (mappedPlacesDbPromise) return mappedPlacesDbPromise;
@@ -1919,13 +2024,14 @@
   }
 
   function captureMappingFrameBase64() {
-    const sourceWidth = video.videoWidth;
-    const sourceHeight = video.videoHeight;
+    const source = mappingCameraOverlay.classList.contains('visible') ? mappingVideo : video;
+    const sourceWidth = source.videoWidth;
+    const sourceHeight = source.videoHeight;
     if (!sourceWidth || !sourceHeight) throw new Error('Camera is not ready yet');
     const scale = Math.min(1, 960 / sourceWidth);
     canvas.width = Math.round(sourceWidth * scale);
     canvas.height = Math.round(sourceHeight * scale);
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL('image/jpeg', 0.72).split(',')[1];
   }
 
@@ -1979,9 +2085,13 @@
   }
 
   newMappedPlaceBtn.addEventListener('click', () => {
-    mappingForm.classList.toggle('visible');
-    if (mappingForm.classList.contains('visible')) mappedPlaceNameInput.focus();
+    mappingForm.classList.add('visible');
+    mappingCameraOverlay.classList.add('visible');
+    startMappingCamera();
+    mappedPlaceNameInput.focus();
   });
+
+  closeMappingCameraBtn.addEventListener('click', closeMappingCamera);
 
   startMappingBtn.addEventListener('click', async () => {
     const name = mappedPlaceNameInput.value.trim();
@@ -2050,6 +2160,7 @@
       landmarkCaptureForm.style.display = 'none';
       startMappingBtn.style.display = '';
       mappedPlaceNameInput.value = '';
+      closeMappingCamera();
     } catch (err) {
       mappingStatusEl.textContent = 'Could not save this place locally: ' + (err && err.message ? err.message : err);
     }
