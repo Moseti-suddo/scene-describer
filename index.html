@@ -91,6 +91,27 @@
     font-weight: 700;
     margin: 12px 0 8px;
     min-height: 24px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: #222;
+    color: #fff;
+  }
+  .status-badge[data-status="ready"] { background: #12351f; color: #86efac; }
+  .status-badge[data-status="listening"] { background: #12351f; color: #4ADE80; }
+  .status-badge[data-status="thinking"] { background: #3a3000; color: #FFD400; }
+  .status-badge[data-status="unavailable"] { background: #3a0000; color: #FF9B9B; }
+  .status-badge[data-status="match"] { background: #12351f; color: #86efac; }
+  .status-badge[data-status="low-confidence"] { background: #3a3000; color: #FFD400; }
+
+  button:not(.nav-btn) {
+    font-family: inherit;
+    min-height: 52px;
+    font-weight: 700;
+    border-radius: 12px;
+  }
+  button:not(.nav-btn):focus-visible {
+    outline: 3px solid #FFFFFF;
+    outline-offset: 3px;
   }
 
   .tap-hint {
@@ -174,10 +195,10 @@
     background: #FF3B30;
     color: #fff;
     border: none;
-    border-radius: 16px;
+    border-radius: 12px;
     letter-spacing: 0.5px;
   }
-  .big-btn:focus-visible { outline: 4px solid #FFFFFF; outline-offset: 3px; }
+  .big-btn { min-height: 76px; }
   .secondary-link-btn {
     position: relative;
     z-index: 5;
@@ -190,9 +211,8 @@
     background: transparent;
     color: #FFD400;
     border: 2px solid #FFD400;
-    border-radius: 10px;
+    border-radius: 12px;
   }
-  .secondary-link-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
   .sos-help-text {
     color: #999;
     font-size: 14px;
@@ -309,6 +329,18 @@
     padding: 20px;
     margin-top: 8px;
   }
+  .section-heading {
+    margin: 20px 0 8px;
+    color: #FFD400;
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .section-subheading {
+    margin: 0 0 10px;
+    color: #999;
+    font-size: 14px;
+    line-height: 1.4;
+  }
   .saved-places-list { margin-bottom: 4px; }
   .saved-place-btn {
     position: relative;
@@ -367,6 +399,33 @@
     border-radius: 12px;
     padding: 20px;
     margin-top: 16px;
+  }
+  .route-progress {
+    height: 8px;
+    background: #333;
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 12px 0 16px;
+  }
+  .route-progress-bar {
+    height: 100%;
+    width: 0;
+    background: #FFD400;
+    transition: width 0.25s ease;
+  }
+  .route-actions { display: flex; gap: 8px; }
+  .route-actions button { flex: 1; margin-top: 0; }
+  .route-secondary-btn {
+    background: transparent;
+    color: #FFD400;
+    border: 2px solid #FFD400;
+    padding: 12px;
+  }
+  .route-stop-btn {
+    background: transparent;
+    color: #FF9B9B;
+    border: 2px solid #FF6B6B;
+    padding: 12px;
   }
   .nav-meta {
     color: #999;
@@ -468,6 +527,8 @@
     margin-top: 10px;
     line-height: 1.4;
   }
+  .mapping-check-result.match-found { border-color: #4ADE80; background: #12351f; }
+  .mapping-check-result.low-confidence { border-color: #FFD400; background: #3a3000; }
   .route-map-card {
     margin-top: 16px;
     border: 2px solid #333;
@@ -890,6 +951,7 @@
 
   <div class="view" id="sosView" role="tabpanel" aria-labelledby="tab-sos">
     <h1 tabindex="-1">Emergency SOS</h1>
+    <div class="status-badge" id="sosReadyStatus" data-status="ready" role="status" aria-live="polite">Ready</div>
     <div class="sos-card">
       <div class="contact-status" id="contactStatus" role="status" aria-live="polite">No emergency contact set yet.</div>
       <button class="big-btn" id="sendSosBtn">Send SOS Now</button>
@@ -913,6 +975,8 @@
 
   <div class="view" id="placesView" role="tabpanel" aria-labelledby="tab-places">
     <h1 tabindex="-1">Places</h1>
+    <h2 class="section-heading">Outdoor navigation</h2>
+    <p class="section-subheading">Get walking directions to a destination using your current location.</p>
     <div class="places-card">
       <div class="saved-places-list" id="savedPlacesList"></div>
       <button class="secondary-link-btn" id="newDestinationBtn" type="button">Where do you want to go? (voice)</button>
@@ -923,9 +987,15 @@
     </div>
 
     <div class="nav-progress-card" id="navProgressCard" style="display:none;">
+      <div class="status-badge" id="routeStatusBadge" data-status="ready" role="status" aria-live="polite">Ready</div>
       <div class="nav-meta" id="navMeta" role="status" aria-live="polite"></div>
+      <div class="route-progress" aria-label="Route progress"><div class="route-progress-bar" id="routeProgressBar"></div></div>
       <div class="nav-step-text" id="navStepText" role="status" aria-live="polite"></div>
-      <button class="next-step-btn" id="nextStepBtn" type="button">Next</button>
+      <div class="route-actions">
+        <button class="next-step-btn" id="nextStepBtn" type="button">Next step</button>
+        <button class="route-secondary-btn" id="repeatStepBtn" type="button">Repeat</button>
+        <button class="route-stop-btn" id="endRouteBtn" type="button">End</button>
+      </div>
     </div>
 
     <div class="route-map-card" id="routeMapCard">
@@ -939,6 +1009,8 @@
       Prototype note: this plays back a real walking route step by step. It does not yet track your live position, so steps advance manually rather than automatically as you walk.
     </div>
 
+    <h2 class="section-heading">Mapped environments</h2>
+    <p class="section-subheading">Private maps of familiar homes, workplaces, and regularly visited places.</p>
     <div class="mapped-places-card">
       <h2>Mapped Places</h2>
       <p class="helper">
@@ -1250,6 +1322,11 @@
   const navMetaEl = document.getElementById('navMeta');
   const navStepTextEl = document.getElementById('navStepText');
   const nextStepBtn = document.getElementById('nextStepBtn');
+  const repeatStepBtn = document.getElementById('repeatStepBtn');
+  const endRouteBtn = document.getElementById('endRouteBtn');
+  const routeProgressBar = document.getElementById('routeProgressBar');
+  const routeStatusBadge = document.getElementById('routeStatusBadge');
+  const sosReadyStatus = document.getElementById('sosReadyStatus');
   const routeMapCard = document.getElementById('routeMapCard');
   const mappedPlacesListEl = document.getElementById('mappedPlacesList');
   const newMappedPlaceBtn = document.getElementById('newMappedPlaceBtn');
@@ -1868,7 +1945,8 @@
         event.stopPropagation();
         const resultEl = row.querySelector('.mapping-check-result');
         resultEl.hidden = false;
-        resultEl.textContent = 'Checking the current camera view…';
+        resultEl.className = 'mapping-check-result';
+        resultEl.textContent = 'Thinking — checking the current camera view…';
         try {
           const vector = await vectorizeImage(captureMappingFrameBase64());
           const matches = place.landmarks
@@ -1876,9 +1954,11 @@
             .sort((a, b) => b.score - a.score);
           const best = matches[0];
           if (!best || best.score < 0.65) {
+            resultEl.classList.add('low-confidence');
             resultEl.textContent = 'I could not confidently match this view to a saved landmark.';
             return;
           }
+          resultEl.classList.add('match-found');
           resultEl.textContent = `This looks like ${best.landmark.name}. Confidence: ${Math.round(best.score * 100)}%. ${best.landmark.notes || ''}`.trim();
         } catch (err) {
           resultEl.textContent = 'Could not check the current view: ' + (err && err.message ? err.message : err);
@@ -2124,7 +2204,15 @@
     if (state === 'thinking') stateRing.classList.add('thinking');
   }
 
-  function setStatus(text) { statusEl.textContent = text; }
+  function setStatus(text) {
+    statusEl.textContent = text;
+    const lower = (text || '').toLowerCase();
+    let status = 'ready';
+    if (lower.includes('listen')) status = 'listening';
+    else if (lower.includes('think') || lower.includes('transcrib') || lower.includes('prepar')) status = 'thinking';
+    else if (lower.includes('camera') && (lower.includes('could not') || lower.includes('unavailable'))) status = 'unavailable';
+    statusEl.dataset.status = status;
+  }
   function setError(text) {
     errorEl.textContent = text || '';
     globalErrorTextEl.textContent = text || '';
@@ -2780,6 +2868,19 @@
       setError('Navigation error: ' + (err && err.message ? err.message : err));
     });
   });
+  repeatStepBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    Promise.resolve(speakCurrentStep()).catch((err) => {
+      setError('Could not repeat step: ' + (err && err.message ? err.message : err));
+    });
+  });
+  endRouteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    activeRoute = null;
+    navProgressCard.style.display = 'none';
+    routeMapCard.style.display = 'none';
+    speakAsync('Route ended. You can start a new destination whenever you are ready.');
+  });
 
   // ---------- Camera ----------
   async function startCamera() {
@@ -2808,7 +2909,7 @@
         );
       }
     } catch (err) {
-      setStatus('');
+      setStatus('Camera unavailable');
       setError('Could not access the camera. Check permissions and try again.');
     }
   }
@@ -3248,12 +3349,20 @@
 
   async function triggerSOS() {
     if (!emergencyContact) {
+      if (sosReadyStatus) {
+        sosReadyStatus.dataset.status = 'unavailable';
+        sosReadyStatus.textContent = 'No contact saved';
+      }
       await speakAsync(t('noContactSetLongPress'));
       resetToIdle();
       return;
     }
 
     setState('thinking');
+    if (sosReadyStatus) {
+      sosReadyStatus.dataset.status = 'thinking';
+      sosReadyStatus.textContent = 'Thinking — preparing alert';
+    }
     setStatus('Preparing emergency alert…');
     await speakAsync(t('preparingEmergencyAlert'));
 
@@ -3295,6 +3404,10 @@
     window.location.href = smsUri;
 
     setState('idle');
+    if (sosReadyStatus) {
+      sosReadyStatus.dataset.status = 'match';
+      sosReadyStatus.textContent = pushSent ? 'Alert ready · contact notified' : 'Alert ready · SMS opened';
+    }
     setStatus('Emergency message opened. Say "did they confirm" any time to check.');
   }
 
@@ -3628,6 +3741,10 @@
     };
 
     navProgressCard.style.display = 'block';
+    if (routeStatusBadge) {
+      routeStatusBadge.dataset.status = 'ready';
+      routeStatusBadge.textContent = 'Route ready';
+    }
     renderRouteMap(activeRoute);
     navMetaEl.textContent = `${activeRoute.destinationName} — ${activeRoute.totalDistanceText}, about ${activeRoute.totalDurationText} walking`;
 
@@ -3703,6 +3820,14 @@
   async function speakCurrentStep() {
     if (!activeRoute) return;
     const step = activeRoute.steps[activeRoute.currentStepIndex];
+    if (routeStatusBadge) {
+      routeStatusBadge.dataset.status = 'listening';
+      routeStatusBadge.textContent = 'Route active';
+    }
+    if (routeProgressBar) {
+      const progress = ((activeRoute.currentStepIndex + 1) / activeRoute.steps.length) * 100;
+      routeProgressBar.style.width = `${Math.min(100, progress)}%`;
+    }
     const distancePhrase = hedgedDistancePhrase(step.distanceMeters, step.distanceText);
     const maneuverPhrase = shortManeuverPhrase(step);
 
@@ -3764,6 +3889,10 @@
       const destLng = activeRoute.destLng;
       navProgressCard.style.display = 'none';
       routeMapCard.style.display = 'none';
+      if (routeStatusBadge) {
+        routeStatusBadge.dataset.status = 'match';
+        routeStatusBadge.textContent = 'Destination reached';
+      }
       activeRoute = null;
 
       const knownPlace = findNearbySavedPlace(destLat, destLng);
