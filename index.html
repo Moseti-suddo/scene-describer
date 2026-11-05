@@ -785,6 +785,73 @@
     color: #999;
   }
   .catalog-item-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+  .demo-tour-btn {
+    position: relative;
+    z-index: 5;
+    width: 100%;
+    padding: 14px;
+    margin-top: 12px;
+    background: #FFD400;
+    color: #000;
+    border: 2px solid #FFD400;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 800;
+  }
+  .demo-tour-btn:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
+  .demo-tour-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.82);
+  }
+  .demo-tour-backdrop.visible { display: flex; }
+  .demo-tour-card {
+    width: min(520px, 100%);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    background: #111;
+    border: 2px solid #FFD400;
+    border-radius: 16px;
+    padding: 22px;
+    color: #fff;
+  }
+  .demo-tour-kicker {
+    color: #FFD400;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .demo-tour-card h2 { margin: 6px 0 8px; color: #FFD400; font-size: 22px; }
+  .demo-tour-card p { margin: 0 0 14px; color: #ddd; line-height: 1.5; }
+  .demo-tour-result {
+    background: #000;
+    border: 2px solid #333;
+    border-radius: 10px;
+    padding: 14px;
+    margin: 14px 0;
+    color: #fff;
+    line-height: 1.5;
+  }
+  .demo-tour-progress { color: #999; font-size: 13px; margin-bottom: 12px; }
+  .demo-tour-actions { display: flex; gap: 8px; }
+  .demo-tour-actions button { flex: 1; margin-top: 0; }
+  .demo-tour-close {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    background: transparent;
+    color: #999;
+    border: 0;
+    font-weight: 700;
+  }
+  .demo-tour-close:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -818,6 +885,7 @@
       <button class="direct-action-btn" id="uploadMediaBtn" type="button">Describe a photo, meme, or video</button>
       <input type="file" id="mediaFileInput" accept="image/*,video/*" class="sr-only" aria-hidden="true" tabindex="-1" />
     </div>
+    <button class="demo-tour-btn" id="startDemoTourBtn" type="button">Start interview demo</button>
   </div>
 
   <div class="view" id="sosView" role="tabpanel" aria-labelledby="tab-sos">
@@ -1101,6 +1169,19 @@
 
 </div>
 
+<div class="demo-tour-backdrop" id="demoTourBackdrop" role="dialog" aria-modal="true" aria-labelledby="demoTourTitle">
+  <div class="demo-tour-card">
+    <div class="demo-tour-kicker" id="demoTourProgress">Step 1 of 4</div>
+    <h2 id="demoTourTitle">Ona understands the world around you</h2>
+    <p id="demoTourDescription"></p>
+    <div class="demo-tour-result" id="demoTourResult" role="status" aria-live="polite"></div>
+    <div class="demo-tour-actions">
+      <button class="primary-btn" id="demoTourNextBtn" type="button">Next</button>
+    </div>
+    <button class="demo-tour-close" id="demoTourCloseBtn" type="button">Exit demo</button>
+  </div>
+</div>
+
 <nav class="navbar" id="navbar" role="tablist" aria-label="Main sections">
   <button class="nav-btn active" data-tab="home" role="tab" aria-selected="true" aria-controls="homeView" id="tab-home">
     <span class="nav-icon-pill"><i class="ti ti-home" aria-hidden="true"></i></span>
@@ -1144,6 +1225,14 @@
   const hazardCheckBtn = document.getElementById('hazardCheckBtn');
   const uploadMediaBtn = document.getElementById('uploadMediaBtn');
   const mediaFileInput = document.getElementById('mediaFileInput');
+  const startDemoTourBtn = document.getElementById('startDemoTourBtn');
+  const demoTourBackdrop = document.getElementById('demoTourBackdrop');
+  const demoTourProgressEl = document.getElementById('demoTourProgress');
+  const demoTourTitleEl = document.getElementById('demoTourTitle');
+  const demoTourDescriptionEl = document.getElementById('demoTourDescription');
+  const demoTourResultEl = document.getElementById('demoTourResult');
+  const demoTourNextBtn = document.getElementById('demoTourNextBtn');
+  const demoTourCloseBtn = document.getElementById('demoTourCloseBtn');
   const navbar = document.getElementById('navbar');
   const homeView = document.getElementById('homeView');
   const sosView = document.getElementById('sosView');
@@ -1617,6 +1706,71 @@
 
   let activeRoute = null;
   let navigationInProgress = false;
+
+  const DEMO_TOUR_STEPS = [
+    {
+      title: 'Understand surroundings',
+      description: 'Ona uses the phone camera and voice to help a blind or low-vision user understand what is ahead.',
+      result: 'Demo response: “There is a clear path ahead. A reception desk is about three metres in front of you, with a doorway on the right.”',
+      tab: 'home'
+    },
+    {
+      title: 'Learn familiar places',
+      description: 'A sighted helper can map a home or workplace by naming landmarks, capturing reference views, and recording hazards.',
+      result: 'Demo map: “My workplace” → Entrance, Reception desk, Main corridor, and My desk. The map stays on the device while Azure creates visual fingerprints for matching.',
+      tab: 'places'
+    },
+    {
+      title: 'Support independent movement',
+      description: 'When the user points the camera at a familiar landmark, Ona compares the view with the saved map and reports only a confident match.',
+      result: 'Demo match: “This looks like the main corridor. Your desk is ahead and slightly left. Confidence: 91%.”',
+      tab: 'places'
+    },
+    {
+      title: 'Keep safety close',
+      description: 'If the user needs help, Ona provides an emergency fallback through a saved contact, location sharing, and SOS confirmation.',
+      result: 'Demo safety flow: “SOS is ready. Your emergency contact will receive a pre-filled message with your location and a confirmation link.”',
+      tab: 'sos'
+    }
+  ];
+  let demoTourStep = 0;
+
+  function renderDemoTourStep() {
+    const step = DEMO_TOUR_STEPS[demoTourStep];
+    demoTourProgressEl.textContent = `Step ${demoTourStep + 1} of ${DEMO_TOUR_STEPS.length}`;
+    demoTourTitleEl.textContent = step.title;
+    demoTourDescriptionEl.textContent = step.description;
+    demoTourResultEl.textContent = step.result;
+    demoTourNextBtn.textContent = demoTourStep === DEMO_TOUR_STEPS.length - 1 ? 'Finish demo' : 'Next';
+    setTab(step.tab);
+  }
+
+  function closeDemoTour() {
+    demoTourBackdrop.classList.remove('visible');
+    startDemoTourBtn.focus();
+  }
+
+  startDemoTourBtn.addEventListener('click', () => {
+    demoTourStep = 0;
+    demoTourBackdrop.classList.add('visible');
+    renderDemoTourStep();
+    demoTourNextBtn.focus();
+  });
+
+  demoTourNextBtn.addEventListener('click', () => {
+    if (demoTourStep >= DEMO_TOUR_STEPS.length - 1) {
+      closeDemoTour();
+      return;
+    }
+    demoTourStep += 1;
+    renderDemoTourStep();
+    demoTourNextBtn.focus();
+  });
+
+  demoTourCloseBtn.addEventListener('click', closeDemoTour);
+  demoTourBackdrop.addEventListener('click', (event) => {
+    if (event.target === demoTourBackdrop) closeDemoTour();
+  });
 
   // ---------- Mapped Places state ----------
   const MAPPED_PLACES_DB = 'ona-mapped-places';
