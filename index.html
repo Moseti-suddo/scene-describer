@@ -21,6 +21,7 @@
     overflow: hidden;
     touch-action: manipulation;
   }
+
   #app {
     position: fixed;
     inset: 0;
@@ -92,17 +93,7 @@
     font-weight: 700;
     margin: 12px 0 8px;
     min-height: 24px;
-    padding: 8px 12px;
-    border-radius: 999px;
-    background: #222;
-    color: #fff;
   }
-  .status-badge[data-status="ready"] { background: #12351f; color: #86efac; }
-  .status-badge[data-status="listening"] { background: #12351f; color: #4ADE80; }
-  .status-badge[data-status="thinking"] { background: #3a3000; color: #FFD400; }
-  .status-badge[data-status="unavailable"] { background: #3a0000; color: #FF9B9B; }
-  .status-badge[data-status="match"] { background: #12351f; color: #86efac; }
-  .status-badge[data-status="low-confidence"] { background: #3a3000; color: #FFD400; }
 
   button:not(.nav-btn) {
     font-family: inherit;
@@ -110,11 +101,6 @@
     font-weight: 700;
     border-radius: 12px;
   }
-  button:not(.nav-btn):focus-visible {
-    outline: 3px solid #FFFFFF;
-    outline-offset: 3px;
-  }
-
   .tap-hint {
     text-align: center;
     font-size: 15px;
@@ -578,6 +564,19 @@
     margin: 0;
     padding: 14px 0 0;
     border-top: 0;
+  }
+  .mapping-route-controls {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 2px solid #333;
+  }
+  .mapping-route-controls[hidden] { display: none; }
+  .mapping-route-points {
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.4;
   }
   .mapping-close-btn {
     min-height: 44px;
@@ -1073,7 +1072,8 @@
       <p class="helper">
         Create a private map of a home, workplace, or other familiar environment.
         Reference photos stay on this device; Azure is used only to create visual
-        fingerprints for matching.
+        fingerprints for matching. You can save individual landmarks, guided routes,
+        or free-exploration paths for indoor navigation.
       </p>
       <div id="mappedPlacesList"></div>
       <button class="secondary-link-btn" id="newMappedPlaceBtn" type="button">Map a new place</button>
@@ -1316,17 +1316,17 @@
     <span class="nav-icon-pill"><i class="ti ti-home" aria-hidden="true"></i></span>
     <span>Home</span>
   </button>
-  <button class="nav-btn" data-tab="connect" role="tab" aria-selected="false" aria-controls="connectView" id="tab-connect">
-    <span class="nav-icon-pill"><i class="ti ti-users" aria-hidden="true"></i></span>
-    <span>Connect</span>
+  <button class="nav-btn" data-tab="places" role="tab" aria-selected="false" aria-controls="placesView" id="tab-places">
+    <span class="nav-icon-pill"><i class="ti ti-map-pin" aria-hidden="true"></i></span>
+    <span>Places</span>
   </button>
   <button class="nav-btn" data-tab="sos" role="tab" aria-selected="false" aria-controls="sosView" id="tab-sos">
     <span class="nav-icon-pill"><i class="ti ti-alert-triangle" aria-hidden="true"></i></span>
     <span>SOS</span>
   </button>
-  <button class="nav-btn" data-tab="places" role="tab" aria-selected="false" aria-controls="placesView" id="tab-places">
-    <span class="nav-icon-pill"><i class="ti ti-map-pin" aria-hidden="true"></i></span>
-    <span>Places</span>
+  <button class="nav-btn" data-tab="connect" role="tab" aria-selected="false" aria-controls="connectView" id="tab-connect">
+    <span class="nav-icon-pill"><i class="ti ti-users" aria-hidden="true"></i></span>
+    <span>Connect</span>
   </button>
   <button class="nav-btn" data-tab="devices" role="tab" aria-selected="false" aria-controls="devicesView" id="tab-devices">
     <span class="nav-icon-pill"><i class="ti ti-device-watch" aria-hidden="true"></i></span>
@@ -1348,6 +1348,20 @@
   </div>
   <p class="mapping-camera-hint">Point the camera at a landmark, name it below, then capture a reference view. You can add another landmark before finishing.</p>
   <div id="mappingCameraControls"></div>
+  <div class="mapping-route-controls" id="mappingRouteControls" hidden>
+    <label for="mappingModeInput">Mapping mode</label>
+    <select id="mappingModeInput">
+      <option value="landmarks">Landmarks only</option>
+      <option value="guided-route">Guided route</option>
+      <option value="free-exploration">Free exploration path</option>
+    </select>
+    <input id="mappingRouteNameInput" type="text" placeholder="Route name, e.g. Entrance to washroom" />
+    <input id="mappingRouteDestinationInput" type="text" placeholder="Destination, e.g. Washroom" />
+    <button class="secondary-link-btn" id="startRouteRecordingBtn" type="button">Start recording path</button>
+    <button class="primary-btn" id="captureRoutePointBtn" type="button" disabled>Capture route point</button>
+    <div class="mapping-route-points" id="mappingRoutePoints">No route points recorded yet.</div>
+    <button class="text-link-btn" id="finishRouteRecordingBtn" type="button" disabled>Save this path</button>
+  </div>
 </section>
 
 <script>
@@ -1356,6 +1370,14 @@
   const mappingCameraOverlay = document.getElementById('mappingCameraOverlay');
   const mappingCameraControls = document.getElementById('mappingCameraControls');
   const closeMappingCameraBtn = document.getElementById('closeMappingCameraBtn');
+  const mappingRouteControls = document.getElementById('mappingRouteControls');
+  const mappingModeInput = document.getElementById('mappingModeInput');
+  const mappingRouteNameInput = document.getElementById('mappingRouteNameInput');
+  const mappingRouteDestinationInput = document.getElementById('mappingRouteDestinationInput');
+  const startRouteRecordingBtn = document.getElementById('startRouteRecordingBtn');
+  const captureRoutePointBtn = document.getElementById('captureRoutePointBtn');
+  const mappingRoutePointsEl = document.getElementById('mappingRoutePoints');
+  const finishRouteRecordingBtn = document.getElementById('finishRouteRecordingBtn');
   const canvas = document.getElementById('canvas');
   const statusEl = document.getElementById('status');
   const errorEl = document.getElementById('error');
@@ -1929,6 +1951,7 @@
   let activeMappingPlace = null;
   let mappedPlacesDbPromise = null;
   let mappingCameraStream = null;
+  let activeRouteDraft = null;
 
   if (mappingCameraControls && mappingForm) mappingCameraControls.appendChild(mappingForm);
 
@@ -1958,7 +1981,19 @@
     }
     mappingVideo.srcObject = null;
     mappingCameraOverlay.classList.remove('visible');
+    mappingRouteControls.hidden = true;
+    activeRouteDraft = null;
     newMappedPlaceBtn.focus();
+  }
+
+  function renderRouteDraft() {
+    if (!activeRouteDraft || !activeRouteDraft.points.length) {
+      mappingRoutePointsEl.textContent = 'No route points recorded yet.';
+      return;
+    }
+    mappingRoutePointsEl.textContent = activeRouteDraft.points
+      .map((point, index) => `${index + 1}. ${point.name}`)
+      .join('  →  ');
   }
 
   function openMappedPlacesDb() {
@@ -2012,6 +2047,29 @@
     return dot / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
+  function isIndoorNavigationRequest(destinationText) {
+    const lower = (destinationText || '').toLowerCase();
+    return INDOOR_NAVIGATION_KEYWORDS.some(keyword => lower.includes(keyword));
+  }
+
+  function findMappedIndoorRoute(destinationText) {
+    const query = (destinationText || '').toLowerCase();
+    const candidates = [];
+    mappedPlaces.forEach(place => {
+      (place.routes || []).forEach(route => {
+        const searchable = `${route.name} ${route.destination || ''} ${place.name}`.toLowerCase();
+        if (query.split(/\s+/).some(word => word.length > 2 && searchable.includes(word))) {
+          candidates.push({ place, route });
+        }
+      });
+    });
+    return candidates.sort((a, b) => {
+      const aExact = `${a.route.name} ${a.route.destination || ''}`.toLowerCase().includes(query);
+      const bExact = `${b.route.name} ${b.route.destination || ''}`.toLowerCase().includes(query);
+      return Number(bExact) - Number(aExact);
+    })[0] || null;
+  }
+
   async function vectorizeImage(image) {
     const response = await fetch('/api/recognize-faces', {
       method: 'POST',
@@ -2046,7 +2104,8 @@
       row.className = 'mapped-place-row';
       row.innerHTML = `<strong></strong><span></span><div class="mapped-place-actions"><button class="secondary-link-btn match-mapped-place" type="button">Check where I am</button></div><div class="mapping-check-result" hidden></div>`;
       row.querySelector('strong').textContent = place.name;
-      row.querySelector('span').textContent = `${place.landmarks.length} landmark${place.landmarks.length === 1 ? '' : 's'} saved locally`;
+      const routeCount = (place.routes || []).length;
+      row.querySelector('span').textContent = `${place.landmarks.length} landmark${place.landmarks.length === 1 ? '' : 's'}${routeCount ? ` · ${routeCount} indoor path${routeCount === 1 ? '' : 's'}` : ''} saved locally`;
       row.querySelector('.match-mapped-place').addEventListener('click', async (event) => {
         event.stopPropagation();
         const resultEl = row.querySelector('.mapping-check-result');
@@ -2104,12 +2163,93 @@
       name,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      landmarks: []
+      landmarks: [],
+      routes: []
     };
     landmarkCaptureForm.style.display = 'block';
     startMappingBtn.style.display = 'none';
+    mappingRouteControls.hidden = false;
     mappingStatusEl.textContent = 'Move the camera toward a landmark, then capture it.';
     landmarkNameInput.focus();
+  });
+
+  startRouteRecordingBtn.addEventListener('click', () => {
+    if (!activeMappingPlace) {
+    mappingStatusEl.textContent = 'Start mapping the place before recording a path.';
+    return;
+    }
+    const name = mappingRouteNameInput.value.trim();
+    if (!name) {
+    mappingStatusEl.textContent = 'Name this path first.';
+    mappingRouteNameInput.focus();
+    return;
+    }
+    activeRouteDraft = {
+    id: crypto.randomUUID ? crypto.randomUUID() : `route-${Date.now()}`,
+    name,
+    mode: mappingModeInput.value,
+    destination: mappingRouteDestinationInput.value.trim(),
+    points: []
+    };
+    startRouteRecordingBtn.disabled = true;
+    captureRoutePointBtn.disabled = false;
+    finishRouteRecordingBtn.disabled = true;
+    mappingStatusEl.textContent = 'Path recording started. Capture the entrance, turns, doors, and destination as you walk.';
+    renderRouteDraft();
+  });
+
+  captureRoutePointBtn.addEventListener('click', async () => {
+    if (!activeMappingPlace || !activeRouteDraft) return;
+    const name = landmarkNameInput.value.trim();
+    if (!name) {
+    mappingStatusEl.textContent = 'Name this route point before capturing it.';
+    landmarkNameInput.focus();
+    return;
+    }
+    captureRoutePointBtn.disabled = true;
+    mappingStatusEl.textContent = 'Saving this route point…';
+    try {
+    const image = captureMappingFrameBase64();
+    const vector = await vectorizeImage(image);
+    const landmark = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `landmark-${Date.now()}`,
+      name,
+      type: landmarkTypeInput.value,
+      notes: landmarkNotesInput.value.trim(),
+      image,
+      vector,
+      capturedAt: Date.now()
+    };
+    activeMappingPlace.landmarks.push(landmark);
+    activeRouteDraft.points.push({ landmarkId: landmark.id, name: landmark.name });
+    activeMappingPlace.updatedAt = Date.now();
+    mappingStatusEl.textContent = `${name} added to the path.`;
+    landmarkNameInput.value = '';
+    landmarkNotesInput.value = '';
+    finishRouteRecordingBtn.disabled = activeRouteDraft.points.length < 2;
+    renderRouteDraft();
+    } catch (err) {
+    mappingStatusEl.textContent = 'Could not save this route point: ' + (err && err.message ? err.message : err);
+    } finally {
+    captureRoutePointBtn.disabled = false;
+    }
+  });
+
+  finishRouteRecordingBtn.addEventListener('click', () => {
+    if (!activeMappingPlace || !activeRouteDraft || activeRouteDraft.points.length < 2) {
+    mappingStatusEl.textContent = 'Capture at least two points before saving a path.';
+    return;
+    }
+    activeMappingPlace.routes = activeMappingPlace.routes || [];
+    activeMappingPlace.routes.push(activeRouteDraft);
+    mappingStatusEl.textContent = `${activeRouteDraft.name} saved. You can record another path or finish mapping.`;
+    activeRouteDraft = null;
+    startRouteRecordingBtn.disabled = false;
+    captureRoutePointBtn.disabled = true;
+    finishRouteRecordingBtn.disabled = true;
+    mappingRouteNameInput.value = '';
+    mappingRouteDestinationInput.value = '';
+    renderRouteDraft();
   });
 
   captureLandmarkBtn.addEventListener('click', async () => {
@@ -2147,6 +2287,10 @@
 
   finishMappingBtn.addEventListener('click', async () => {
     if (!activeMappingPlace) return;
+    if (activeRouteDraft) {
+      mappingStatusEl.textContent = 'Save or finish the current path before finishing this place.';
+      return;
+    }
     if (!activeMappingPlace.landmarks.length) {
       mappingStatusEl.textContent = 'Capture at least one landmark before finishing.';
       return;
@@ -2306,6 +2450,7 @@
     'nani yuko hapa', 'kuna mtu yeyote hapa', 'nani huyo'
   ];
   const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to', 'nielekeze kwenda', 'nipeleke', 'maelekezo ya kwenda'];
+  const INDOOR_NAVIGATION_KEYWORDS = ['washroom', 'bathroom', 'toilet', 'restroom', 'hallway', 'corridor', 'reception', 'office', 'classroom', 'room', 'door', 'stairs', 'staircase', 'indoors', 'inside'];
   const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue', 'endelea', 'inayofuata'];
 
   function setState(state) {
@@ -3803,6 +3948,42 @@
       // Fall through — try a cached route below before giving up entirely.
     }
 
+    async function beginIndoorRoute(destinationText) {
+      const match = findMappedIndoorRoute(destinationText);
+      if (!match) {
+        await speakAsync(`I do not have a recorded indoor route to ${destinationText} yet. I will use the camera to look for signs, doors, corridors, or other clues instead of opening the outdoor map.`);
+        try {
+          await askBackend({ question: `Help me look for an indoor route to ${destinationText}. Point out visible signs, doors, corridors, stairs, or other useful landmarks, and be clear if the destination is not visible.` });
+        } catch (err) {
+          await speakAsync('I could not inspect the indoor view right now. Please point the camera around and try again.');
+        }
+        return;
+      }
+
+      activeRoute = {
+        indoor: true,
+        destinationName: match.route.destination || destinationText,
+        steps: match.route.points.map((point, index) => ({
+          stepNumber: index + 1,
+          indoorName: point.name,
+          distanceText: index === match.route.points.length - 1 ? 'the destination' : 'the next mapped point',
+          distanceMeters: null
+        })),
+        currentStepIndex: 0,
+        totalDistanceText: 'recorded indoor path',
+        totalDurationText: 'landmark by landmark'
+      };
+      navProgressCard.style.display = 'block';
+      routeMapCard.style.display = 'none';
+      navMetaEl.textContent = `${match.place.name} — ${activeRoute.destinationName} (indoor route)`;
+      if (routeStatusBadge) {
+        routeStatusBadge.dataset.status = 'ready';
+        routeStatusBadge.textContent = 'Indoor route ready';
+      }
+      await speakAsync(`I found a recorded indoor route in ${match.place.name}. I will guide you landmark by landmark. This route uses the camera and saved landmarks, not outdoor maps.`);
+      await speakCurrentStep();
+    }
+
     let data = null;
     let usedCachedFallback = false;
 
@@ -3939,6 +4120,11 @@
       const progress = ((activeRoute.currentStepIndex + 1) / activeRoute.steps.length) * 100;
       routeProgressBar.style.width = `${Math.min(100, progress)}%`;
     }
+    if (activeRoute.indoor && step.indoorName) {
+      navStepTextEl.textContent = `Point ${step.stepNumber}: ${step.indoorName}.`;
+      await speakAsync(`Look for ${step.indoorName}. This is point ${step.stepNumber} of ${activeRoute.steps.length} on the indoor route.`);
+      return;
+    }
     const distancePhrase = hedgedDistancePhrase(step.distanceMeters, step.distanceText);
     const maneuverPhrase = shortManeuverPhrase(step);
 
@@ -3996,6 +4182,16 @@
 
     if (activeRoute.currentStepIndex >= activeRoute.steps.length) {
       const destName = activeRoute.destinationName;
+      if (activeRoute.indoor) {
+        navProgressCard.style.display = 'none';
+        if (routeStatusBadge) {
+          routeStatusBadge.dataset.status = 'match';
+          routeStatusBadge.textContent = 'Destination reached';
+        }
+        activeRoute = null;
+        await speakAsync(`You have reached ${destName}.`);
+        return;
+      }
       const destLat = activeRoute.destLat;
       const destLng = activeRoute.destLng;
       navProgressCard.style.display = 'none';
@@ -4055,7 +4251,8 @@
     if (navigationInProgress) return;
     navigationInProgress = true;
     try {
-      await beginRoute(destinationText);
+      if (isIndoorNavigationRequest(destinationText)) await beginIndoorRoute(destinationText);
+      else await beginRoute(destinationText);
     } finally {
       navigationInProgress = false;
     }
@@ -4071,7 +4268,9 @@
         await speakAsync(t('navDidntCatchDestination'));
         return;
       }
-      await beginRoute(destText.trim());
+      const destination = destText.trim();
+      if (isIndoorNavigationRequest(destination)) await beginIndoorRoute(destination);
+      else await beginRoute(destination);
     } finally {
       navigationInProgress = false;
     }
