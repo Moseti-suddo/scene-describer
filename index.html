@@ -1668,10 +1668,10 @@
   }
 
   async function vectorizeImage(image) {
-    const response = await fetch('/api/vision-vectorize', {
+    const response = await fetch('/api/recognize-faces', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image })
+      body: JSON.stringify({ image, purpose: 'vectorize' })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || `Vision service returned ${response.status}`);
