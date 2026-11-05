@@ -2391,6 +2391,7 @@
 
   const DESCRIBE_KEYWORDS = [
     'describe', 'what is around', "what's around", 'look around',
+    'describe my surroundings', 'describe the surroundings', 'what are my surroundings',
     'new picture', 'take a picture', 'whats here', "what's here",
     'start over', 'new scene', 'look again',
     'what is in front of me', "what's in front of me",
@@ -4402,7 +4403,8 @@
         return;
       }
       const navigateKeyword = NAVIGATE_KEYWORDS.find(k => lower.includes(k));
-      if (navigateKeyword) {
+      const isSceneOrHazardRequest = looksLikeFreshSceneRequest(speechText) || looksLikeHazardCheckRequest(speechText);
+      if (navigateKeyword && !isSceneOrHazardRequest) {
         const destText = speechText.slice(lower.indexOf(navigateKeyword) + navigateKeyword.length).trim();
         if (destText) {
           await startNavigationToText(destText);
