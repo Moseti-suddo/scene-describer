@@ -2052,22 +2052,55 @@
     return INDOOR_NAVIGATION_KEYWORDS.some(keyword => lower.includes(keyword));
   }
 
-  function findMappedIndoorRoute(destinationText) {
-    const query = (destinationText || '').toLowerCase();
-    const candidates = [];
-    mappedPlaces.forEach(place => {
-      (place.routes || []).forEach(route => {
-        const searchable = `${route.name} ${route.destination || ''} ${place.name}`.toLowerCase();
-        if (query.split(/\s+/).some(word => word.length > 2 && searchable.includes(word))) {
-          candidates.push({ place, route });
-        }
+  function isOutdoorNavigationRequest(destinationText) {
+    const lower = (destinationText || '').toLowerCase();
+    return OUTDOOR_CONTEXT_KEYWORDS.some(keyword => lower.includes(keyword));
+  }
+
+  async function findCurrentMappedPlace() {
+    if (!mappedPlaces.length) return null;
+    try {
+      const vector = await vectorizeImage(captureMappingFrameBase64());
+      let bestMatch = null;
+      mappedPlaces.forEach(place => {
+        place.landmarks.forEach(landmark => {
+          const score = cosineSimilarity(vector, landmark.vector);
+          if (!bestMatch || score > bestMatch.score) bestMatch = { place, score };
+        });
       });
-    });
+      return bestMatch && bestMatch.score >= 0.65 ? bestMatch.place : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function findMappedIndoorRouteInPlace(destinationText, place) {
+    const query = (destinationText || '').toLowerCase();
+    const candidates = (place.routes || [])
+      .filter(route => {
+        const searchable = `${route.name} ${route.destination || ''}`.toLowerCase();
+        return query.split(/\s+/).some(word => word.length > 2 && searchable.includes(word));
+      })
+      .map(route => ({ place, route }));
     return candidates.sort((a, b) => {
       const aExact = `${a.route.name} ${a.route.destination || ''}`.toLowerCase().includes(query);
       const bExact = `${b.route.name} ${b.route.destination || ''}`.toLowerCase().includes(query);
       return Number(bExact) - Number(aExact);
     })[0] || null;
+  }
+
+  async function findMappedIndoorRoute(destinationText) {
+    const directMatches = mappedPlaces
+      .flatMap(place => (place.routes || []).map(route => ({ place, route })))
+      .filter(({ route }) => {
+        const query = (destinationText || '').toLowerCase();
+        const searchable = `${route.name} ${route.destination || ''}`.toLowerCase();
+        return query.split(/\s+/).some(word => word.length > 2 && searchable.includes(word));
+      });
+    if (directMatches.length) return directMatches[0];
+
+    const currentPlace = await findCurrentMappedPlace();
+    return currentPlace ? findMappedIndoorRouteInPlace(destinationText, currentPlace) : null;
   }
 
   async function vectorizeImage(image) {
@@ -2450,7 +2483,8 @@
     'who is that', "who's that", 'who is in front of me',
     'nani yuko hapa', 'kuna mtu yeyote hapa', 'nani huyo'
   ];
-  const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to', 'nielekeze kwenda', 'nipeleke', 'maelekezo ya kwenda'];
+  const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to', 'help me get to', 'help me reach', 'get me to', 'show me how to get to', 'nielekeze kwenda', 'nipeleke', 'maelekezo ya kwenda'];
+  const OUTDOOR_CONTEXT_KEYWORDS = ['outside', 'outdoors', 'street', 'road', 'supermarket', 'mall', 'bus stop', 'bus station', 'train station', 'airport', 'park', 'campus', 'hospital', 'restaurant', 'shop', 'store'];
   const INDOOR_NAVIGATION_KEYWORDS = ['washroom', 'bathroom', 'toilet', 'restroom', 'hallway', 'corridor', 'reception', 'office', 'classroom', 'room', 'door', 'stairs', 'staircase', 'indoors', 'inside'];
   const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue', 'endelea', 'inayofuata'];
 
@@ -3732,7 +3766,7 @@
       btn.innerHTML = `${place.name}<span class="visit-count">Visited ${place.visitCount} ${times}</span>`;
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        Promise.resolve(startNavigationToText(place.name)).catch((err) => {
+        Promise.resolve(beginRoute(place.name)).catch((err) => {
           setError('Navigation failed: ' + (err && err.message ? err.message : err));
         });
       });
@@ -3949,42 +3983,6 @@
       // Fall through — try a cached route below before giving up entirely.
     }
 
-    async function beginIndoorRoute(destinationText) {
-      const match = findMappedIndoorRoute(destinationText);
-      if (!match) {
-        await speakAsync(`I do not have a recorded indoor route to ${destinationText} yet. I will use the camera to look for signs, doors, corridors, or other clues instead of opening the outdoor map.`);
-        try {
-          await askBackend({ question: `Help me look for an indoor route to ${destinationText}. Point out visible signs, doors, corridors, stairs, or other useful landmarks, and be clear if the destination is not visible.` });
-        } catch (err) {
-          await speakAsync('I could not inspect the indoor view right now. Please point the camera around and try again.');
-        }
-        return;
-      }
-
-      activeRoute = {
-        indoor: true,
-        destinationName: match.route.destination || destinationText,
-        steps: match.route.points.map((point, index) => ({
-          stepNumber: index + 1,
-          indoorName: point.name,
-          distanceText: index === match.route.points.length - 1 ? 'the destination' : 'the next mapped point',
-          distanceMeters: null
-        })),
-        currentStepIndex: 0,
-        totalDistanceText: 'recorded indoor path',
-        totalDurationText: 'landmark by landmark'
-      };
-      navProgressCard.style.display = 'block';
-      routeMapCard.style.display = 'none';
-      navMetaEl.textContent = `${match.place.name} — ${activeRoute.destinationName} (indoor route)`;
-      if (routeStatusBadge) {
-        routeStatusBadge.dataset.status = 'ready';
-        routeStatusBadge.textContent = 'Indoor route ready';
-      }
-      await speakAsync(`I found a recorded indoor route in ${match.place.name}. I will guide you landmark by landmark. This route uses the camera and saved landmarks, not outdoor maps.`);
-      await speakCurrentStep();
-    }
-
     let data = null;
     let usedCachedFallback = false;
 
@@ -4051,6 +4049,44 @@
       support: t('routeIntroSupport', activeRoute.destinationName, activeRoute.totalDistanceText, activeRoute.totalDurationText)
     };
     await speakAsync(routeIntroByMode[assistanceMode] || routeIntroByMode.guided);
+    await speakCurrentStep();
+  }
+
+  async function beginIndoorRoute(destinationText) {
+    const match = await findMappedIndoorRoute(destinationText);
+    if (!match) {
+      await speakAsync(`I do not have a recorded indoor route to ${destinationText} yet. I will use the camera to look for signs, doors, corridors, or other clues instead of opening the outdoor map.`);
+      try {
+        activeImageBase64 = null;
+        conversationHistory = [];
+        await askBackend({ question: `Help me move toward ${destinationText} from the current camera view. Treat this as indoor or close-range guidance: identify the visible destination if possible, then give only the next safe actions such as walk straight, stop, turn left or right, or look for a door, sign, hallway, or other landmark. Do not give outdoor map directions or invent distances.` });
+      } catch (err) {
+        await speakAsync('I could not inspect the indoor view right now. Please point the camera around and try again.');
+      }
+      return;
+    }
+
+    activeRoute = {
+      indoor: true,
+      destinationName: match.route.destination || destinationText,
+      steps: match.route.points.map((point, index) => ({
+        stepNumber: index + 1,
+        indoorName: point.name,
+        distanceText: index === match.route.points.length - 1 ? 'the destination' : 'the next mapped point',
+        distanceMeters: null
+      })),
+      currentStepIndex: 0,
+      totalDistanceText: 'recorded indoor path',
+      totalDurationText: 'landmark by landmark'
+    };
+    navProgressCard.style.display = 'block';
+    routeMapCard.style.display = 'none';
+    navMetaEl.textContent = `${match.place.name} — ${activeRoute.destinationName} (indoor route)`;
+    if (routeStatusBadge) {
+      routeStatusBadge.dataset.status = 'ready';
+      routeStatusBadge.textContent = 'Indoor route ready';
+    }
+    await speakAsync(`I found a recorded indoor route in ${match.place.name}. I will guide you landmark by landmark. This route uses the camera and saved landmarks, not outdoor maps.`);
     await speakCurrentStep();
   }
 
@@ -4248,12 +4284,15 @@
     updateRouteMapStep(activeRoute);
   }
 
-  async function startNavigationToText(destinationText) {
+  async function startNavigationToText(destinationText, contextText = destinationText) {
     if (navigationInProgress) return;
     navigationInProgress = true;
     try {
-      if (isIndoorNavigationRequest(destinationText)) await beginIndoorRoute(destinationText);
-      else await beginRoute(destinationText);
+      if (isOutdoorNavigationRequest(`${contextText} ${destinationText}`)) {
+        await beginRoute(destinationText);
+      } else {
+        await beginIndoorRoute(destinationText);
+      }
     } finally {
       navigationInProgress = false;
     }
@@ -4270,8 +4309,8 @@
         return;
       }
       const destination = destText.trim();
-      if (isIndoorNavigationRequest(destination)) await beginIndoorRoute(destination);
-      else await beginRoute(destination);
+      if (isOutdoorNavigationRequest(destination)) await beginRoute(destination);
+      else await beginIndoorRoute(destination);
     } finally {
       navigationInProgress = false;
     }
@@ -4407,7 +4446,7 @@
       if (navigateKeyword && !isSceneOrHazardRequest) {
         const destText = speechText.slice(lower.indexOf(navigateKeyword) + navigateKeyword.length).trim();
         if (destText) {
-          await startNavigationToText(destText);
+          await startNavigationToText(destText, speechText);
         } else {
           await startNavigationByVoice();
         }
