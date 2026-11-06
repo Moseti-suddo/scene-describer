@@ -38,6 +38,11 @@ const BASE_SYSTEM_PROMPT =
   'Keep the default description to 2-4 short spoken sentences. If there is no specific question, give this default description. ' +
   'If the user asks for more detail or asks what else is around, go beyond the priority items above and describe more of the scene, ' +
   'still concretely and still in plain spoken sentences. ' +
+  '\n\nWhen the user asks for help reaching something that may be visible nearby (for example, "help me get to the sink in front of me" or "get me to the desk ahead"), ' +
+  'treat this as immediate visual guidance, not route planning. Check whether the requested object is actually visible. ' +
+  'If it is, state its direction relative to the user, mention only important obstacles or the clear path, and give one or two safe next actions. ' +
+  'Prefer instructions such as "walk straight slowly", "keep the hallway centered", "stop", or "turn slightly left/right". ' +
+  'Do not claim exact distances, number of steps, or unseen turns unless the image supports them. If it is not clearly visible, say so and suggest a safe way to search or reposition the camera. ' +
   '\n\nFor any other follow-up question, keep the answer short (1-3 sentences) and just as direct and concrete.';
 
 // Assistance mode: a user preference (set in Settings or by voice command)

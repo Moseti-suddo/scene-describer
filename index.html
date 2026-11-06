@@ -2057,6 +2057,11 @@
     return OUTDOOR_CONTEXT_KEYWORDS.some(keyword => lower.includes(keyword));
   }
 
+  function isImmediateGuidanceRequest(text) {
+    const lower = (text || '').toLowerCase();
+    return IMMEDIATE_GUIDANCE_KEYWORDS.some(keyword => lower.includes(keyword));
+  }
+
   async function findCurrentMappedPlace() {
     if (!mappedPlaces.length) return null;
     try {
@@ -2485,6 +2490,11 @@
   ];
   const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to', 'help me get to', 'help me reach', 'get me to', 'show me how to get to', 'nielekeze kwenda', 'nipeleke', 'maelekezo ya kwenda'];
   const OUTDOOR_CONTEXT_KEYWORDS = ['outside', 'outdoors', 'street', 'road', 'supermarket', 'mall', 'bus stop', 'bus station', 'train station', 'airport', 'park', 'campus', 'hospital', 'restaurant', 'shop', 'store'];
+  const IMMEDIATE_GUIDANCE_KEYWORDS = [
+    'in front of me', 'infront of me', 'right in front', 'directly ahead',
+    'straight ahead', 'ahead of me', 'visible ahead', 'nearby', 'right there',
+    'in front', 'infront', 'mbele yangu', 'hapo mbele'
+  ];
   const INDOOR_NAVIGATION_KEYWORDS = ['washroom', 'bathroom', 'toilet', 'restroom', 'hallway', 'corridor', 'reception', 'office', 'classroom', 'room', 'door', 'stairs', 'staircase', 'indoors', 'inside'];
   const NEXT_STEP_KEYWORDS = ['next step', 'next', 'continue', 'endelea', 'inayofuata'];
 
@@ -4053,6 +4063,20 @@
   }
 
   async function beginIndoorRoute(destinationText) {
+    if (isImmediateGuidanceRequest(destinationText)) {
+      activeImageBase64 = null;
+      conversationHistory = [];
+      await speakAsync(`I will check the camera for ${destinationText} and give you the next safe movement.`);
+      try {
+        await askBackend({
+          question: `Give immediate camera-based guidance to the ${destinationText}. First decide whether the requested object or destination is actually visible and reachable from the current view. If it is visible, say exactly where it is relative to the user, identify obstacles or a clear path, and give only the next one or two safe actions such as walk straight slowly, keep the hallway centered, stop, or turn left or right. If it is not clearly visible, say that plainly and tell the user how to search safely. Do not open or mention outdoor maps, do not describe a saved route, and do not invent exact distances, steps, or turns.`,
+        });
+      } catch (err) {
+        await speakAsync('I could not inspect the current camera view. Please try again while pointing the camera toward the destination.');
+      }
+      return;
+    }
+
     const match = await findMappedIndoorRoute(destinationText);
     if (!match) {
       await speakAsync(`I do not have a recorded indoor route to ${destinationText} yet. I will use the camera to look for signs, doors, corridors, or other clues instead of opening the outdoor map.`);
