@@ -105,6 +105,9 @@ async function runAnalysis({ client, mediaType, frames, audioTranscript, questio
 
 async function handleStatus(req, res) {
   try {
+    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+      return res.status(500).json({ status: 'error', error: 'Media analysis storage is not configured on the server' });
+    }
     const { id } = req.query;
     if (!id) {
       return res.status(400).json({ error: 'Missing id' });
@@ -173,6 +176,9 @@ async function handleCreate(req, res) {
     const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
     const region = process.env.AWS_REGION || 'us-east-1';
 
+    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+      return res.status(500).json({ error: 'Media analysis storage is not configured on the server' });
+    }
     if (!accessKeyId || !secretAccessKey) {
       return res.status(500).json({ error: 'Server is missing its AWS credentials configuration' });
     }
@@ -221,7 +227,8 @@ async function handleCreate(req, res) {
 
   } catch (err) {
     console.error('describe-media-create error:', err);
-    return res.status(500).json({ error: 'Something went wrong on the server' });
+    const detail = err && err.message ? err.message : 'Unknown server error';
+    return res.status(500).json({ error: `Media analysis could not start: ${detail}` });
   }
 }
 

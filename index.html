@@ -4696,13 +4696,13 @@
   // Claude model was chosen over Nova Lite (Vercel's 4.5MB request-body
   // ceiling), with Nova Lite kept as a documented fallback if quality here
   // proves insufficient.
-  const MEDIA_MAX_FRAMES = 8;
-  const MEDIA_FRAME_JPEG_QUALITY = 0.6;
-  const MEDIA_FRAME_MAX_DIMENSION = 768; // px, longest side
+  const MEDIA_MAX_FRAMES = 6;
+  const MEDIA_FRAME_JPEG_QUALITY = 0.55;
+  const MEDIA_FRAME_MAX_DIMENSION = 640; // px, longest side
   // How much of a longer video actually gets analyzed — keeps frame
   // extraction + payload size bounded. A short note is added to the
   // spoken result if a video is trimmed.
-  const MEDIA_MAX_VIDEO_SECONDS = 60;
+  const MEDIA_MAX_VIDEO_SECONDS = 30;
   const MEDIA_POLL_INTERVAL_MS = 1500;
   const MEDIA_POLL_MAX_ATTEMPTS = 30; // ~45s of polling
 
@@ -4886,7 +4886,12 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mediaType, frames, audioTranscript: audioTranscript || null, question: question || '' })
     });
-    const createData = await createRes.json();
+    let createData;
+    try {
+      createData = await createRes.json();
+    } catch (err) {
+      throw new Error(`The media server returned an invalid response (${createRes.status})`);
+    }
     if (!createRes.ok) throw new Error(createData.error || 'Could not start analysis');
     if (createData.jobId) return pollMediaJob(createData.jobId);
     if (createData.description) return createData.description; // defensive fallback
