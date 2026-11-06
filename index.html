@@ -3317,8 +3317,11 @@
   // Give users room to pause between clauses without ending a long request.
   const SILENCE_STOP_DELAY_MS = 2200;
   const MIN_SPEECH_BEFORE_STOP_MS = 300;
-  const DEFAULT_VOICE_TIMEOUT_MS = 12000;
-  const INITIAL_VOICE_TIMEOUT_MS = 10000;
+  // Keep ordinary commands responsive while leaving enough time for a
+  // complete destination phrase. Short follow-ups use the smaller window.
+  const DEFAULT_VOICE_TIMEOUT_MS = 10000;
+  const INITIAL_VOICE_TIMEOUT_MS = 8000;
+  const SHORT_VOICE_TIMEOUT_MS = 7000;
 
   async function waitForSpeechOutputToSettle() {
     while (speechOutputActive) {
@@ -4454,7 +4457,7 @@
       setStatus(strikes === 0
         ? 'Listening — keep talking any time, or stay quiet to finish.'
         : 'Still listening…');
-      const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: SHORT_VOICE_TIMEOUT_MS }) : null;
       if (heard) return heard;
     }
     return null;
