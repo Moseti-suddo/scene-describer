@@ -2471,7 +2471,15 @@
   ];
   const EMERGENCY_KEYWORDS = ['sos', 'emergency', 'send help', 'call for help', 'someone is hurting me', 'dharura', 'tuma msaada'];
   const GUIDANCE_RECHECK_KEYWORDS = ['check again', 'look again', 'continue', 'next', 'recheck', 'check my path', 'angalia tena', 'endelea'];
-  const GUIDANCE_PATH_CHECK_KEYWORDS = ['is my path clear', 'can i walk', 'is it safe to walk', 'safe to continue', 'path to'];
+  const GUIDANCE_PATH_CHECK_KEYWORDS = [
+    'is my path clear', 'is the path clear', 'is the way clear',
+    'is the space clear', 'is there clear space', 'is the area clear',
+    'is the space in front of me clear', 'is the area in front of me clear',
+    'can i walk', 'can i walk straight', 'can i move forward',
+    'is it safe to walk', 'safe to continue', 'path to',
+    'is it clear for me to walk', 'can i proceed', 'may i proceed',
+    'je njia iko wazi', 'naweza kutembea', 'naweza kwenda mbele'
+  ];
   const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help', 'piga simu ya dharura', 'piga simu mtu wangu wa dharura'];
   const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact', 'whatsapp dharura'];
   const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed', 'je wamethibitisha', 'wanakuja'];
@@ -2557,6 +2565,7 @@
   // Swahili voice availability is inconsistent across devices — see
   // elevenLabsAvailable below for the fallback if that call fails.
   let elevenLabsAvailable = true;
+  let speechOutputActive = false;
 
   function speak(text, onDone) {
     if (preferredLanguage === 'sw' && elevenLabsAvailable) {
@@ -2574,12 +2583,14 @@
     if (chosenVoice) utter.voice = chosenVoice;
     utter.rate = voicePrefs.rate || 1;
     utter.pitch = 1;
+    speechOutputActive = true;
     setState('speaking');
 
     let done = false;
     const finish = () => {
       if (done) return;
       done = true;
+      speechOutputActive = false;
       clearTimeout(safetyTimer);
       if (onDone) onDone();
     };
@@ -2600,6 +2611,7 @@
   // honest, not silent), then continues using the device's built-in voice
   // for the rest of the session.
   async function speakViaElevenLabs(text, onDone) {
+    speechOutputActive = true;
     setState('speaking');
     let done = false;
     let audioEl = null;
@@ -2609,6 +2621,7 @@
     const finish = () => {
       if (done) return;
       done = true;
+      speechOutputActive = false;
       if (safetyTimer) clearTimeout(safetyTimer);
       if (objectUrl) { try { URL.revokeObjectURL(objectUrl); } catch (e) {} }
       if (onDone) onDone();
@@ -3294,6 +3307,14 @@
   const DEFAULT_VOICE_TIMEOUT_MS = 12000;
   const INITIAL_VOICE_TIMEOUT_MS = 10000;
 
+  async function waitForSpeechOutputToSettle() {
+    while (speechOutputActive) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    // Let the microphone and speaker output stop ringing before recording.
+    await new Promise(resolve => setTimeout(resolve, 350));
+  }
+
   function listenOnce({ timeoutMs = DEFAULT_VOICE_TIMEOUT_MS } = {}) {
     return new Promise((resolve) => {
       if (!voiceSupported) { resolve(null); return; }
@@ -3334,6 +3355,7 @@
 
       (async () => {
         try {
+          await waitForSpeechOutputToSettle();
           const stream = await ensureMicStream();
           mimeType = pickRecorderMimeType();
           recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
@@ -4085,10 +4107,11 @@
       conversationHistory = [];
       await speakAsync(`I will check the camera for ${activeGuidanceTarget} and give you the next safe movement.`);
       try {
-        await askBackend({
-          question: `Give immediate camera-based guidance to the ${activeGuidanceTarget}. First decide whether the requested object or destination is actually visible and reachable from the current view. If it is visible, say exactly where it is relative to the user, identify obstacles or a clear path, and give only the next one or two safe actions such as walk straight slowly, keep the hallway centered, stop, or turn left or right. If it is not clearly visible, say that plainly and tell the user how to search safely. Do not open or mention outdoor maps, do not describe a saved route, and do not invent exact distances, steps, or turns.`,
+        const answer = await askBackend({
+          question: `Give immediate camera-based guidance to the ${activeGuidanceTarget}. First decide whether it is visible and whether the path is clear, blocked, or uncertain. Respond in exactly two short spoken sentences: first state visibility and path status; second give only the next safe movement, such as walk straight slowly, keep centered, stop, turn left or right, or reposition the camera. Do not ask a question, mention emergency contacts, mention outdoor maps, describe a saved route, or invent exact distances, steps, or unseen turns.`,
         });
         interactionMode = 'awaiting-recheck';
+        await speakAsync(answer);
       } catch (err) {
         await speakAsync('I could not inspect the current camera view. Please try again while pointing the camera toward the destination.');
       }
@@ -4097,11 +4120,17 @@
 
     const match = await findMappedIndoorRoute(destinationText);
     if (!match) {
-      await speakAsync(`I do not have a recorded indoor route to ${destinationText} yet. I will use the camera to look for signs, doors, corridors, or other clues instead of opening the outdoor map.`);
+      interactionMode = 'nearby-guidance';
+      activeGuidanceTarget = destinationText.trim();
+      await speakAsync(`I will check the camera for ${activeGuidanceTarget} and give you the next safe movement.`);
       try {
         activeImageBase64 = null;
         conversationHistory = [];
-        await askBackend({ question: `Help me move toward ${destinationText} from the current camera view. Treat this as indoor or close-range guidance: identify the visible destination if possible, then give only the next safe actions such as walk straight, stop, turn left or right, or look for a door, sign, hallway, or other landmark. Do not give outdoor map directions or invent distances.` });
+        const answer = await askBackend({
+          question: `Help me move toward the ${activeGuidanceTarget} from the current camera view. Respond in exactly two short spoken sentences: first say whether it is visible and whether the path is clear, blocked, or uncertain; second give only the next safe movement. Do not ask a question, mention emergency contacts, use outdoor maps or saved routes, or invent distances, steps, or unseen turns.`,
+        });
+        interactionMode = 'awaiting-recheck';
+        await speakAsync(answer);
       } catch (err) {
         await speakAsync('I could not inspect the indoor view right now. Please point the camera around and try again.');
       }
@@ -4139,7 +4168,7 @@
     conversationHistory = [];
     try {
       const answer = await askBackend({
-        question: `Re-check the current camera view for the ${activeGuidanceTarget}. Give only the next safe movement toward it. Say whether it is still visible, whether the path is clear, and whether the user should walk slowly, stop, turn, or reposition the camera. Do not use outdoor maps, saved routes, exact distances, or step counts.`,
+        question: `Re-check the current camera view for the ${activeGuidanceTarget}. Respond in exactly two short spoken sentences: first say whether it is visible and whether the path is clear, blocked, or uncertain; second give only the next safe movement. Say walk slowly, stop, turn, or reposition the camera when appropriate. Do not ask a question, mention emergency contacts, use outdoor maps or saved routes, or give exact distances, steps, or unseen turns.`,
       });
       interactionMode = 'awaiting-recheck';
       await new Promise(resolve => speak(answer, resolve));
