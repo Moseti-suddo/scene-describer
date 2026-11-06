@@ -1,6 +1,4 @@
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-import { kv } from '@vercel/kv';
-import { randomUUID } from 'crypto';
 
 // Deliberately the SAME model already approved and running on this account
 // for api/describe.js — this endpoint exists to give it a different job
@@ -22,8 +20,6 @@ const MAX_FRAMES = 10;
 // expected to compress before sending — defends against a misbehaving or
 // modified client, not the normal path.
 const MAX_FRAME_BASE64_CHARS = 2_000_000; // ~1.5MB decoded
-
-const JOB_TTL_SECONDS = 60 * 60; // 1 hour — no reason to keep these longer
 
 // Separate, distinct persona from api/describe.js's BASE_SYSTEM_PROMPT.
 // That prompt is tuned for physical-world navigation and safety; this one
@@ -61,17 +57,6 @@ const MEDIA_SYSTEM_PROMPT =
 
 const DEFAULT_QUESTION_TEXT = 'Describe this image or video in full, including any text, and explain what it appears to mean.';
 
-// If a job has been "pending" longer than this, the POST invocation that
-// created it almost certainly crashed or hit its maxDuration without
-// reaching its own catch block (e.g. a hard timeout kill) — report a
-// timeout rather than letting the frontend poll forever. Stays comfortably
-// below this endpoint's maxDuration in vercel.json.
-const STALE_PENDING_MS = 55 * 1000;
-
-function buildJobKey(id) {
-  return `mediaJob:${id}`;
-}
-
 async function runAnalysis({ client, mediaType, frames, audioTranscript, question }) {
   const content = frames.map(frameBase64 => ({
     image: { format: 'jpeg', source: { bytes: Buffer.from(frameBase64, 'base64') } }
@@ -101,39 +86,6 @@ async function runAnalysis({ client, mediaType, frames, audioTranscript, questio
   const text = (response?.output?.message?.content?.[0]?.text || '').trim();
   if (!text) throw new Error('No response was returned');
   return text;
-}
-
-async function handleStatus(req, res) {
-  try {
-    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-      return res.status(500).json({ status: 'error', error: 'Media analysis storage is not configured on the server' });
-    }
-    const { id } = req.query;
-    if (!id) {
-      return res.status(400).json({ error: 'Missing id' });
-    }
-
-    const record = await kv.get(buildJobKey(id));
-    if (!record) {
-      return res.status(404).json({ status: 'not_found' });
-    }
-
-    if (record.status === 'pending' && (Date.now() - record.createdAt) > STALE_PENDING_MS) {
-      return res.status(200).json({
-        status: 'error',
-        error: 'Analysis is taking too long. Please try again with a shorter clip.'
-      });
-    }
-
-    return res.status(200).json({
-      status: record.status,
-      description: record.description || null,
-      error: record.error || null
-    });
-  } catch (err) {
-    console.error('describe-media status error:', err);
-    return res.status(500).json({ error: 'Could not check the analysis status' });
-  }
 }
 
 async function handleCreate(req, res) {
@@ -176,54 +128,17 @@ async function handleCreate(req, res) {
     const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
     const region = process.env.AWS_REGION || 'us-east-1';
 
-    if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-      return res.status(500).json({ error: 'Media analysis storage is not configured on the server' });
-    }
     if (!accessKeyId || !secretAccessKey) {
       return res.status(500).json({ error: 'Server is missing its AWS credentials configuration' });
     }
-
-    const jobId = randomUUID();
-    const jobKey = buildJobKey(jobId);
-
-    await kv.set(jobKey, {
-      status: 'pending',
-      mediaType,
-      createdAt: Date.now()
-    }, { ex: JOB_TTL_SECONDS });
 
     const client = new BedrockRuntimeClient({
       region,
       credentials: { accessKeyId, secretAccessKey }
     });
 
-    // Synchronous within this invocation (Vercel functions don't have a
-    // separate background-worker hand-off) — by the time this responds,
-    // KV already holds the final status. The frontend still polls
-    // describe-media-status for a clean "Analyzing…" UI state and as a
-    // safety net if the connection to this response drops.
-    try {
-      const description = await runAnalysis({ client, mediaType, frames, audioTranscript, question });
-      await kv.set(jobKey, {
-        status: 'done',
-        mediaType,
-        createdAt: Date.now(),
-        description
-      }, { ex: JOB_TTL_SECONDS });
-    } catch (analysisErr) {
-      console.error('describe-media analysis error:', analysisErr);
-      const detail = analysisErr && analysisErr.name
-        ? `${analysisErr.name}: ${analysisErr.message || ''}`.trim()
-        : (analysisErr && analysisErr.message) || 'Analysis failed';
-      await kv.set(jobKey, {
-        status: 'error',
-        mediaType,
-        createdAt: Date.now(),
-        error: detail
-      }, { ex: JOB_TTL_SECONDS });
-    }
-
-    return res.status(200).json({ jobId });
+    const description = await runAnalysis({ client, mediaType, frames, audioTranscript, question });
+    return res.status(200).json({ description });
 
   } catch (err) {
     console.error('describe-media-create error:', err);
@@ -234,6 +149,6 @@ async function handleCreate(req, res) {
 
 export default async function handler(req, res) {
   if (req.method === 'POST') return handleCreate(req, res);
-  if (req.method === 'GET') return handleStatus(req, res);
+  if (req.method === 'GET') return res.status(405).json({ error: 'Status polling is not used for media analysis' });
   return res.status(405).json({ error: 'Method not allowed' });
 }

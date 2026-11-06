@@ -4696,15 +4696,13 @@
   // Claude model was chosen over Nova Lite (Vercel's 4.5MB request-body
   // ceiling), with Nova Lite kept as a documented fallback if quality here
   // proves insufficient.
-  const MEDIA_MAX_FRAMES = 6;
-  const MEDIA_FRAME_JPEG_QUALITY = 0.55;
-  const MEDIA_FRAME_MAX_DIMENSION = 640; // px, longest side
+  const MEDIA_MAX_FRAMES = 4;
+  const MEDIA_FRAME_JPEG_QUALITY = 0.45;
+  const MEDIA_FRAME_MAX_DIMENSION = 512; // px, longest side
   // How much of a longer video actually gets analyzed — keeps frame
   // extraction + payload size bounded. A short note is added to the
   // spoken result if a video is trimmed.
   const MEDIA_MAX_VIDEO_SECONDS = 30;
-  const MEDIA_POLL_INTERVAL_MS = 1500;
-  const MEDIA_POLL_MAX_ATTEMPTS = 30; // ~45s of polling
 
   let mediaJobActive = false;
   // Kept in memory (not persisted) so a follow-up question can reuse the
@@ -4868,34 +4866,26 @@
     }
   }
 
-  async function pollMediaJob(jobId) {
-    for (let attempt = 0; attempt < MEDIA_POLL_MAX_ATTEMPTS; attempt++) {
-      await sleep(MEDIA_POLL_INTERVAL_MS);
-      const res = await fetch('/api/describe-media?id=' + encodeURIComponent(jobId));
-      const data = await res.json();
-      if (data.status === 'done') return data.description;
-      if (data.status === 'error') throw new Error(data.error || 'Analysis failed');
-      // status === 'pending' (or not_found on a very early poll) — keep waiting
-    }
-    throw new Error('Analysis is taking longer than expected. Please try again.');
-  }
-
   async function askMediaBackend({ mediaType, frames, audioTranscript, question }) {
-    const createRes = await fetch('/api/describe-media', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mediaType, frames, audioTranscript: audioTranscript || null, question: question || '' })
-    });
+    let response;
+    try {
+      response = await fetch('/api/describe-media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaType, frames, audioTranscript: audioTranscript || null, question: question || '' })
+      });
+    } catch (err) {
+      throw new Error('Could not reach the media analysis server. Check the deployment and try again.');
+    }
     let createData;
     try {
-      createData = await createRes.json();
+      createData = await response.json();
     } catch (err) {
-      throw new Error(`The media server returned an invalid response (${createRes.status})`);
+      throw new Error(`The media server returned an invalid response (${response.status})`);
     }
-    if (!createRes.ok) throw new Error(createData.error || 'Could not start analysis');
-    if (createData.jobId) return pollMediaJob(createData.jobId);
-    if (createData.description) return createData.description; // defensive fallback
-    throw new Error('No analysis job was returned');
+    if (!response.ok) throw new Error(createData.error || 'Could not analyze the media');
+    if (createData.description) return createData.description;
+    throw new Error('The media server returned no description');
   }
 
   // Shared entry point for both the manual file-picker upload and a file
