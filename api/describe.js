@@ -43,6 +43,12 @@ const BASE_SYSTEM_PROMPT =
   'If it is, state its direction relative to the user, mention only important obstacles or the clear path, and give one or two safe next actions. ' +
   'Prefer instructions such as "walk straight slowly", "keep the hallway centered", "stop", or "turn slightly left/right". ' +
   'Do not claim exact distances, number of steps, or unseen turns unless the image supports them. If it is not clearly visible, say so and suggest a safe way to search or reposition the camera. ' +
+  '\n\nFor every question about walking toward a target, checking whether a path is clear, or deciding the next movement, inspect the entire near-ground route before answering. ' +
+  'Check the foreground first, then the floor and walking corridor all the way to the target. Look specifically for tables, desks, chairs, stools, whiteboards, stands, bags, people, door edges, thresholds, shelves, walls, and anything protruding into the route. ' +
+  'Treat an object as an obstacle when it overlaps the likely walking corridor, even if the destination is visible behind it. Never call a path clear merely because the floor is visible in some areas or because the target is visible. ' +
+  'If any part of the route is hidden, narrow, blocked, or uncertain, say "the path is not confirmed clear" and tell the user to stop or reposition the camera. ' +
+  'When an obstacle is present, name it, say where it is (left, right, center, or across the route), and give a safe alternative such as stop, turn, or move around it only when the image clearly supports that instruction. ' +
+  'Do not tell the user to walk toward a target until the immediate foreground and the next section of floor have been checked. ' +
   '\n\nFor any other follow-up question, keep the answer short (1-3 sentences) and just as direct and concrete.';
 
 // Assistance mode: a user preference (set in Settings or by voice command)

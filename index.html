@@ -2493,6 +2493,12 @@
     'what do i do next', 'where do i go next',
     'je njia iko wazi', 'naweza kutembea', 'naweza kwenda mbele'
   ];
+  const GUIDANCE_TARGET_STATUS_KEYWORDS = [
+    'am i close', 'are we close', 'how close', 'how far',
+    'is it nearby', 'is it near', 'can you see it now',
+    'do you still see it', 'is the destination visible',
+    'is the exit visible', 'is the doorway visible'
+  ];
   const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help', 'piga simu ya dharura', 'piga simu mtu wangu wa dharura'];
   const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact', 'whatsapp dharura'];
   const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed', 'je wamethibitisha', 'wanakuja'];
@@ -4137,7 +4143,7 @@
       await speakAsync(`I will check the camera for ${activeGuidanceTarget} and give you the next safe movement.`);
       try {
         const answer = await askBackend({
-          question: `Give immediate camera-based guidance to the ${activeGuidanceTarget}. First decide whether it is visible and whether the path is clear, blocked, or uncertain. Respond in exactly two short spoken sentences: first state visibility and path status; second give only the next safe movement, such as walk straight slowly, keep centered, stop, turn left or right, or reposition the camera. Do not ask a question, mention emergency contacts, mention outdoor maps, describe a saved route, or invent exact distances, steps, or unseen turns.`,
+          question: `Give immediate camera-based guidance to the ${activeGuidanceTarget}. Inspect the foreground and the entire visible walking corridor first, including the floor directly in front of the user. Identify any table, desk, chair, whiteboard, stand, bag, person, doorway edge, threshold, shelf, wall, or other object that blocks or narrows the route. Decide whether the target is visible and whether the route is clear, blocked, or uncertain. Respond in exactly two short spoken sentences: first state the target and path status, including the obstacle and its side if present; second give only the next safe movement, such as stop, walk slowly, keep centered, turn left or right, or reposition the camera. Never call the path clear if the foreground is blocked or not visible. Do not ask a question, mention emergency contacts, mention outdoor maps, describe a saved route, or invent exact distances, steps, or unseen turns.`,
         });
         interactionMode = 'awaiting-recheck';
         await speakAsync(answer);
@@ -4156,7 +4162,7 @@
         activeImageBase64 = null;
         conversationHistory = [];
         const answer = await askBackend({
-          question: `Help me move toward the ${activeGuidanceTarget} from the current camera view. Respond in exactly two short spoken sentences: first say whether it is visible and whether the path is clear, blocked, or uncertain; second give only the next safe movement. Do not ask a question, mention emergency contacts, use outdoor maps or saved routes, or invent distances, steps, or unseen turns.`,
+          question: `Help me move toward the ${activeGuidanceTarget} from the current camera view. Inspect the foreground and the entire visible walking corridor first, including the floor directly in front of the user. Identify any table, desk, chair, whiteboard, stand, bag, person, doorway edge, threshold, shelf, wall, or other object that blocks or narrows the route. Respond in exactly two short spoken sentences: first say whether the target is visible and whether the path is clear, blocked, or uncertain, naming any obstacle and its side; second give only the next safe movement. Never call the path clear if the foreground is blocked or not visible. Do not ask a question, mention emergency contacts, use outdoor maps or saved routes, or invent distances, steps, or unseen turns.`,
         });
         interactionMode = 'awaiting-recheck';
         await speakAsync(answer);
@@ -4197,7 +4203,7 @@
     conversationHistory = [];
     try {
       const answer = await askBackend({
-        question: `Re-check the current camera view for the ${activeGuidanceTarget}. Respond in exactly two short spoken sentences: first say whether it is visible and whether the path is clear, blocked, or uncertain; second give only the next safe movement. Say walk slowly, stop, turn, or reposition the camera when appropriate. Do not ask a question, mention emergency contacts, use outdoor maps or saved routes, or give exact distances, steps, or unseen turns.`,
+        question: `Re-check the current camera view for the ${activeGuidanceTarget}. Inspect the foreground and the entire visible walking corridor first, including the floor directly in front of the user. Identify any table, desk, chair, whiteboard, stand, bag, person, doorway edge, threshold, shelf, wall, or other object that blocks or narrows the route. Respond in exactly two short spoken sentences: first say whether it is visible and whether the path is clear, blocked, or uncertain, naming any obstacle and its side; second give only the next safe movement. Never call the path clear if the foreground is blocked or not visible. Say stop, walk slowly, turn, or reposition the camera when appropriate. Do not ask a question, mention emergency contacts, use outdoor maps or saved routes, or give exact distances, steps, or unseen turns.`,
       });
       interactionMode = 'awaiting-recheck';
       await new Promise(resolve => speak(answer, resolve));
@@ -4566,6 +4572,7 @@
       if (activeGuidanceTarget && (
         GUIDANCE_RECHECK_KEYWORDS.some(k => lower === k || lower.includes(k))
         || GUIDANCE_PATH_CHECK_KEYWORDS.some(k => lower.includes(k))
+        || GUIDANCE_TARGET_STATUS_KEYWORDS.some(k => lower.includes(k))
         || looksLikeHazardCheckRequest(speechText)
       )) {
         await recheckNearbyGuidance();
