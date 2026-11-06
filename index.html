@@ -1783,6 +1783,8 @@
   // back-and-forth so far. A fresh "describe" resets both.
   let activeImageBase64 = null;
   let conversationHistory = []; // [{ role: 'user'|'assistant', text }]
+  let interactionMode = 'idle';
+  let activeGuidanceTarget = null;
 
   // App state machine: 'idle' | 'listening' | 'thinking' | 'speaking'
   let appState = 'idle';
@@ -2060,6 +2062,18 @@
   function isImmediateGuidanceRequest(text) {
     const lower = (text || '').toLowerCase();
     return IMMEDIATE_GUIDANCE_KEYWORDS.some(keyword => lower.includes(keyword));
+  }
+
+  function recentSceneMentionsTarget(targetText) {
+    const target = (targetText || '').toLowerCase().trim();
+    if (!target || !conversationHistory.length) return false;
+    const recentAssistant = [...conversationHistory]
+      .reverse()
+      .find(turn => turn.role === 'assistant');
+    if (!recentAssistant) return false;
+    const sceneWords = ['ahead', 'in front', 'straight', 'visible', 'clear path', 'doorway', 'hallway', 'corridor'];
+    return recentAssistant.text.toLowerCase().includes(target)
+      && sceneWords.some(word => recentAssistant.text.toLowerCase().includes(word));
   }
 
   async function findCurrentMappedPlace() {
@@ -2455,7 +2469,9 @@
     'je ni salama', 'ni salama kuendelea', 'kuna ngazi',
     'kuna kitu cha kuwa makini nacho', 'kuna vizuizi'
   ];
-  const EMERGENCY_KEYWORDS = ['sos', 'emergency', 'help me', 'send help', 'i need help', 'dharura', 'nisaidie', 'naomba msaada', 'tuma msaada'];
+  const EMERGENCY_KEYWORDS = ['sos', 'emergency', 'send help', 'call for help', 'someone is hurting me', 'dharura', 'tuma msaada'];
+  const GUIDANCE_RECHECK_KEYWORDS = ['check again', 'look again', 'continue', 'next', 'recheck', 'check my path', 'angalia tena', 'endelea'];
+  const GUIDANCE_PATH_CHECK_KEYWORDS = ['is my path clear', 'can i walk', 'is it safe to walk', 'safe to continue', 'path to'];
   const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help', 'piga simu ya dharura', 'piga simu mtu wangu wa dharura'];
   const WHATSAPP_KEYWORDS = ['whatsapp emergency', 'whatsapp my contact', 'whatsapp dharura'];
   const CHECK_CONFIRM_KEYWORDS = ['did they confirm', 'check sos', 'check confirmation', 'are they coming', 'have they confirmed', 'je wamethibitisha', 'wanakuja'];
@@ -2488,7 +2504,7 @@
     'who is that', "who's that", 'who is in front of me',
     'nani yuko hapa', 'kuna mtu yeyote hapa', 'nani huyo'
   ];
-  const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to', 'help me get to', 'help me reach', 'get me to', 'show me how to get to', 'nielekeze kwenda', 'nipeleke', 'maelekezo ya kwenda'];
+  const NAVIGATE_KEYWORDS = ['navigate to', 'take me to', 'directions to', 'navigate me to', 'walk me to', 'help me get to', 'i need help getting to', 'help me reach', 'get me to', 'i want to get to', 'show me how to get to', 'nielekeze kwenda', 'nipeleke', 'maelekezo ya kwenda'];
   const OUTDOOR_CONTEXT_KEYWORDS = ['outside', 'outdoors', 'street', 'road', 'supermarket', 'mall', 'bus stop', 'bus station', 'train station', 'airport', 'park', 'campus', 'hospital', 'restaurant', 'shop', 'store'];
   const IMMEDIATE_GUIDANCE_KEYWORDS = [
     'in front of me', 'infront of me', 'right in front', 'directly ahead',
@@ -2631,6 +2647,7 @@
   }
 
   function resetToIdle() {
+    interactionMode = 'idle';
     setState('idle');
     setStatus('Ready. Double-tap anywhere to talk again.');
     tapHint.textContent = 'Double-tap anywhere to begin';
@@ -3200,14 +3217,7 @@
 
       if (!hasAnnouncedInstructions) {
         hasAnnouncedInstructions = true;
-        speak(
-          t('voiceControlActive'),
-          () => {
-            if (!emergencyContact) {
-              speak(t('noContactYetLongPress'));
-            }
-          }
-        );
+        speak(t('voiceControlActive'));
       }
     } catch (err) {
       setStatus('Camera unavailable');
@@ -4063,14 +4073,19 @@
   }
 
   async function beginIndoorRoute(destinationText) {
-    if (isImmediateGuidanceRequest(destinationText)) {
+    const immediateGuidance = isImmediateGuidanceRequest(destinationText)
+      || recentSceneMentionsTarget(destinationText);
+    if (immediateGuidance) {
+      interactionMode = 'nearby-guidance';
+      activeGuidanceTarget = destinationText.replace(/\b(in|infront|in front|right|directly|straight|ahead|of me|there)\b/gi, ' ').replace(/\s+/g, ' ').trim() || destinationText;
       activeImageBase64 = null;
       conversationHistory = [];
-      await speakAsync(`I will check the camera for ${destinationText} and give you the next safe movement.`);
+      await speakAsync(`I will check the camera for ${activeGuidanceTarget} and give you the next safe movement.`);
       try {
         await askBackend({
-          question: `Give immediate camera-based guidance to the ${destinationText}. First decide whether the requested object or destination is actually visible and reachable from the current view. If it is visible, say exactly where it is relative to the user, identify obstacles or a clear path, and give only the next one or two safe actions such as walk straight slowly, keep the hallway centered, stop, or turn left or right. If it is not clearly visible, say that plainly and tell the user how to search safely. Do not open or mention outdoor maps, do not describe a saved route, and do not invent exact distances, steps, or turns.`,
+          question: `Give immediate camera-based guidance to the ${activeGuidanceTarget}. First decide whether the requested object or destination is actually visible and reachable from the current view. If it is visible, say exactly where it is relative to the user, identify obstacles or a clear path, and give only the next one or two safe actions such as walk straight slowly, keep the hallway centered, stop, or turn left or right. If it is not clearly visible, say that plainly and tell the user how to search safely. Do not open or mention outdoor maps, do not describe a saved route, and do not invent exact distances, steps, or turns.`,
         });
+        interactionMode = 'awaiting-recheck';
       } catch (err) {
         await speakAsync('I could not inspect the current camera view. Please try again while pointing the camera toward the destination.');
       }
@@ -4112,6 +4127,24 @@
     }
     await speakAsync(`I found a recorded indoor route in ${match.place.name}. I will guide you landmark by landmark. This route uses the camera and saved landmarks, not outdoor maps.`);
     await speakCurrentStep();
+  }
+
+  async function recheckNearbyGuidance() {
+    if (!activeGuidanceTarget) return false;
+    interactionMode = 'nearby-guidance';
+    activeImageBase64 = null;
+    conversationHistory = [];
+    try {
+      const answer = await askBackend({
+        question: `Re-check the current camera view for the ${activeGuidanceTarget}. Give only the next safe movement toward it. Say whether it is still visible, whether the path is clear, and whether the user should walk slowly, stop, turn, or reposition the camera. Do not use outdoor maps, saved routes, exact distances, or step counts.`,
+      });
+      interactionMode = 'awaiting-recheck';
+      await new Promise(resolve => speak(answer, resolve));
+      return true;
+    } catch (err) {
+      setError((err && err.message ? err.message : 'Could not re-check the path') + ' — ask me to check again.');
+      return true;
+    }
   }
 
   // ---------- Step-count phrasing (O&M-style approximation) ----------
@@ -4377,7 +4410,11 @@
         return;
       }
 
-      if (EMERGENCY_KEYWORDS.some(k => lower.includes(k))) {
+      const looksLikeNavigationRequest = NAVIGATE_KEYWORDS.some(k => lower.includes(k))
+        || isImmediateGuidanceRequest(lower)
+        || lower.includes('getting to')
+        || lower.includes('reach the');
+      if (EMERGENCY_KEYWORDS.some(k => lower.includes(k)) && !looksLikeNavigationRequest) {
         await handleEmergencyIntent();
         return;
       }
@@ -4462,6 +4499,14 @@
       }
       if (activeRoute && NEXT_STEP_KEYWORDS.some(k => lower === k || lower.includes(k))) {
         await advanceToNextStep();
+        resetToIdle();
+        return;
+      }
+      if (activeGuidanceTarget && (
+        GUIDANCE_RECHECK_KEYWORDS.some(k => lower === k || lower.includes(k))
+        || GUIDANCE_PATH_CHECK_KEYWORDS.some(k => lower.includes(k))
+      )) {
+        await recheckNearbyGuidance();
         resetToIdle();
         return;
       }
