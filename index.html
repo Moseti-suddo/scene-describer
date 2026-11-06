@@ -3323,14 +3323,6 @@
   const INITIAL_VOICE_TIMEOUT_MS = 8000;
   const SHORT_VOICE_TIMEOUT_MS = 7000;
 
-  async function waitForSpeechOutputToSettle() {
-    while (speechOutputActive) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    // Let the microphone and speaker output stop ringing before recording.
-    await new Promise(resolve => setTimeout(resolve, 350));
-  }
-
   function listenOnce({ timeoutMs = DEFAULT_VOICE_TIMEOUT_MS } = {}) {
     return new Promise((resolve) => {
       if (!voiceSupported) { resolve(null); return; }
@@ -3371,7 +3363,6 @@
 
       (async () => {
         try {
-          await waitForSpeechOutputToSettle();
           const stream = await ensureMicStream();
           mimeType = pickRecorderMimeType();
           recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
