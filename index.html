@@ -2448,6 +2448,10 @@
     'start over', 'new scene', 'look again',
     'what is in front of me', "what's in front of me",
     'what is on the table', "what's on the table",
+    'is there an exit', 'is there a way out', 'is there a doorway',
+    'is there a door', 'are there any doors', 'is there an opening',
+    'where is the exit', 'where is the doorway', 'is an exit visible',
+    'is there an exit in my view', 'is there a doorway in my view',
     'are there people', 'is anyone nearby', 'what is happening around',
     "what's happening around",
     'eleza', 'elezea nini kilicho karibu', 'kuna nini karibu',
@@ -2465,6 +2469,9 @@
     'anything to watch out for', 'anything i should watch',
     'are there stairs', 'any stairs', 'watch for stairs',
     'any obstacles', 'anything in my way', 'anything in the way',
+    'anything blocking my path', 'anything blocking the way',
+    'is the floor clear', 'is the floor safe', 'is there an obstacle',
+    'is there anything blocking', 'can i move safely',
     'any hazards', 'is there anything dangerous',
     'je ni salama', 'ni salama kuendelea', 'kuna ngazi',
     'kuna kitu cha kuwa makini nacho', 'kuna vizuizi'
@@ -2478,6 +2485,12 @@
     'can i walk', 'can i walk straight', 'can i move forward',
     'is it safe to walk', 'safe to continue', 'path to',
     'is it clear for me to walk', 'can i proceed', 'may i proceed',
+    'is the walking space clear', 'is the walking space in front of me clear',
+    'is the space ahead clear', 'is the area ahead clear',
+    'is the path ahead clear', 'is there anything blocking my path',
+    'is there anything blocking the way', 'what should i do next',
+    'what is my next movement', 'what is the next movement',
+    'what do i do next', 'where do i go next',
     'je njia iko wazi', 'naweza kutembea', 'naweza kwenda mbele'
   ];
   const CALL_KEYWORDS = ['call emergency', 'call my contact', 'phone my contact', 'call for help', 'piga simu ya dharura', 'piga simu mtu wangu wa dharura'];
@@ -3470,6 +3483,28 @@
     if (!text) return false;
     const lower = text.toLowerCase();
     return HAZARD_KEYWORDS.some(k => lower.includes(k));
+  }
+
+  function looksLikeSpecificVisualQuestion(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    return [
+      'exit', 'way out', 'doorway', 'door', 'opening',
+      'obstacle', 'blocking', 'path', 'walking space', 'floor',
+      'stairs', 'safe to', 'in my view', 'visible'
+    ].some(k => lower.includes(k));
+  }
+
+  function isGenericSceneRequest(text) {
+    if (!text) return true;
+    const normalized = text.toLowerCase().replace(/[?.!]/g, '').trim();
+    return [
+      'describe', 'describe my surroundings', 'describe the surroundings',
+      'what is around me', "what's around me", 'look around',
+      'what is in front of me', "what's in front of me",
+      'what are my surroundings', 'new scene', 'new picture',
+      'take a picture', 'whats here', "what's here"
+    ].includes(normalized);
   }
 
   // ---------- AI Orchestration (fallback only) ----------
@@ -4537,6 +4572,7 @@
       if (activeGuidanceTarget && (
         GUIDANCE_RECHECK_KEYWORDS.some(k => lower === k || lower.includes(k))
         || GUIDANCE_PATH_CHECK_KEYWORDS.some(k => lower.includes(k))
+        || looksLikeHazardCheckRequest(speechText)
       )) {
         await recheckNearbyGuidance();
         resetToIdle();
@@ -4576,6 +4612,7 @@
 
     try {
       const questionForBackend = isHazardCheck
+        || (wantsFreshScene && looksLikeSpecificVisualQuestion(speechText) && !isGenericSceneRequest(speechText))
         ? speechText
         : (wantsFreshScene ? '' : speechText);
       const answer = await askBackend({ question: questionForBackend });
