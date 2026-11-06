@@ -2901,7 +2901,7 @@
 
     const names = matches.map(p => `${p.name}${p.relationship ? ', your ' + p.relationship : ''}`).join(', and ');
     await speakAsync(`You have ${matches.length} matches: ${names}. Which one?`);
-    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+    const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
     if (!heard) return null;
     const lower = heard.toLowerCase();
     return matches.find(p => lower.includes(p.name.toLowerCase())) || null;
@@ -3288,10 +3288,13 @@
   }
 
   const SILENCE_RMS_THRESHOLD = 0.02;
-  const SILENCE_STOP_DELAY_MS = 1200;
+  // Give users room to pause between clauses without ending a long request.
+  const SILENCE_STOP_DELAY_MS = 2200;
   const MIN_SPEECH_BEFORE_STOP_MS = 300;
+  const DEFAULT_VOICE_TIMEOUT_MS = 12000;
+  const INITIAL_VOICE_TIMEOUT_MS = 10000;
 
-  function listenOnce({ timeoutMs = 6000 } = {}) {
+  function listenOnce({ timeoutMs = DEFAULT_VOICE_TIMEOUT_MS } = {}) {
     return new Promise((resolve) => {
       if (!voiceSupported) { resolve(null); return; }
 
@@ -3481,7 +3484,7 @@
   // routing logic here.
   async function runNeedHelpFlow() {
     await speakAsync('Sure. What do you need help with — your surroundings, getting somewhere, someone to talk to, or an emergency?');
-    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+    const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
     if (!heard) { resetToIdle(); return; }
     await runInteractionCycle(heard);
   }
@@ -3489,7 +3492,7 @@
   // Spec Section 5 — "I need someone" flow.
   async function runNeedSomeoneFlow() {
     await speakAsync('Would you like to talk to someone you trust, someone who understands, or a professional?');
-    const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+    const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
     const lower = (heard || '').toLowerCase();
     if (lower.includes('trust') || lower.includes('circle')) {
       setTab('circle');
@@ -3520,7 +3523,7 @@
 
     if (intent === 'GENERAL') {
       await speakAsync(clarifyQuestion || 'What would you like help with?');
-      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
       if (heard) await runInteractionCycle(heard);
       else resetToIdle();
       return true;
@@ -3545,7 +3548,7 @@
     if (intent === 'HUMAN_CONNECTION') {
       if (needsConfirmation) {
         await speakAsync(confirmationText || (extractedEntity ? `Call ${extractedEntity}?` : 'Do that?'));
-        const heard = voiceSupported ? await listenOnce({ timeoutMs: 5000 }) : null;
+        const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
         const lower = (heard || '').toLowerCase();
         const confirmed = ARRIVAL_YES_KEYWORDS.some(k => lower.includes(k));
         if (!confirmed) {
@@ -3632,7 +3635,7 @@
 
     try {
       await speakAsync(t('askContactPhoneNumber'));
-      const digitsText = voiceSupported ? await listenOnce({ timeoutMs: 8000 }) : null;
+      const digitsText = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
       const digits = (digitsText || '').replace(/\D/g, '');
 
       if (!digits || digits.length < 7) {
@@ -4321,7 +4324,7 @@
       }
       await speakAsync(t('arrivedConfirmQuestion'));
 
-      const heard = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
       const lower = (heard || '').toLowerCase();
       const saidYes = ARRIVAL_YES_KEYWORDS.some(k => lower.includes(k));
       const saidNo = ARRIVAL_NO_KEYWORDS.some(k => lower.includes(k));
@@ -4360,7 +4363,7 @@
     navigationInProgress = true;
     try {
       await speakAsync(t('whereDoYouWantToGo'));
-      const destText = voiceSupported ? await listenOnce({ timeoutMs: 6000 }) : null;
+      const destText = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
       if (!destText || !destText.trim()) {
         await speakAsync(t('navDidntCatchDestination'));
         return;
@@ -4387,7 +4390,7 @@
       setStatus(strikes === 0
         ? 'Listening — keep talking any time, or stay quiet to finish.'
         : 'Still listening…');
-      const heard = voiceSupported ? await listenOnce({ timeoutMs: 5000 }) : null;
+      const heard = voiceSupported ? await listenOnce({ timeoutMs: DEFAULT_VOICE_TIMEOUT_MS }) : null;
       if (heard) return heard;
     }
     return null;
@@ -4398,7 +4401,7 @@
     let speechText = initialSpeech;
 
     if (speechText === undefined) {
-      speechText = voiceSupported ? await listenOnce({ timeoutMs: 4000 }) : null;
+      speechText = voiceSupported ? await listenOnce({ timeoutMs: INITIAL_VOICE_TIMEOUT_MS }) : null;
     }
 
     if (speechText) {
